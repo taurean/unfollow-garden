@@ -1,11 +1,11 @@
 <script module>
 	import { defineMeta } from '@storybook/addon-svelte-csf';
-	import SuedeButton from '$lib/components/ui/SuedeButton.svelte';
+	import Button from '$lib/components/ui/Button.svelte';
 	import { fn } from 'storybook/test';
 
 	const { Story } = defineMeta({
-		title: 'UI/SuedeButton',
-		component: SuedeButton,
+		title: 'UI/Button',
+		component: Button,
 		tags: ['autodocs'],
 		args: {
 			onclick: fn()
@@ -18,19 +18,19 @@
 </script>
 
 <Story name="Primary" asChild>
-	<SuedeButton onclick={fn()}>Click me</SuedeButton>
+	<Button onclick={fn()}>Click me</Button>
 </Story>
 
 <Story name="Disabled" asChild>
-	<SuedeButton disabled onclick={fn()}>Disabled</SuedeButton>
+	<Button disabled onclick={fn()}>Disabled</Button>
 </Story>
 
 <Story name="As link" asChild>
-	<SuedeButton href="https://bits-ui.com" onclick={fn()}>Visit bits-ui</SuedeButton>
+	<Button href="https://bits-ui.com" onclick={fn()}>Visit bits-ui</Button>
 </Story>
 
 <Story name="With class override" asChild>
-	<SuedeButton class="u:fs-1" style="background-color: var(--hue-emerald-500);" onclick={fn()}>
+	<Button class="u:fs-1" style="background-color: var(--hue-emerald-500);" onclick={fn()}>
 		Custom styled
-	</SuedeButton>
+	</Button>
 </Story>

@@ -9,9 +9,9 @@ description: >
   `src/lib/styles/`, classes, data attributes, or any task involving styling,
   layout, or component composition in a stylebase-based project.
 paths:
-  - "**/*.svelte"
-  - "src/lib/styles/**"
-  - "**/*.css"
+  - '**/*.svelte'
+  - 'src/lib/styles/**'
+  - '**/*.css'
 ---
 
 # Writing CSS in a stylebase + Bits UI project
@@ -89,7 +89,7 @@ rearrangements, not for a second design.
 
 The interactive vocabulary comes from Bits UI. Any interactive element — button,
 dialog, dropdown, tabs, accordion, tooltip, combobox, switch — uses its Bits UI
-primitive as the wrapper. The SuedeButton example is the shape:
+primitive as the wrapper. The Button example is the shape:
 
 ```svelte
 <script lang="ts">
@@ -97,13 +97,13 @@ primitive as the wrapper. The SuedeButton example is the shape:
 	let { href, children, class: className, ...rest }: Props = $props();
 </script>
 
-<Button.Root {href} {...rest} class={`suede-button u:fs-1${className ? ` ${className}` : ''}`}>
+<Button.Root {href} {...rest} class={`button u:fs-1${className ? ` ${className}` : ''}`}>
 	{@render children?.()}
 </Button.Root>
 ```
 
 The wrapper exists for three reasons: it gives the project's block a name
-(`suede-button`), it stacks utility classes onto the rendered element, and it
+(`button`), it stacks utility classes onto the rendered element, and it
 lets the project's `<style>` block target a single class for all block-level
 visuals. Reach for `<button>` directly only inside the wrapper; never in
 user-facing markup. Bits UI's accessibility behaviour — keyboard handling, ARIA
@@ -156,9 +156,10 @@ most of the work before the block ever loads.
   **Dividers and borders** use `--hue-z0-divider`, which is `color-mix` against
   `currentColor` — always correct against whatever text colour is in play, in
   either theme. Reaching for a gray primitive instead is more work and worse.
+
 - **Spacing.** `--space-5xs` through `--space-5xl`, with `sm` and `medium`
   slotted between `xs` and `lg` (the stops are `5xs, 4xs, 3xs, 2xs, xs, sm,
-  medium, lg, xl, 2xl, 3xl, 4xl, 5xl`). Fluid via `clamp()` — viewport-aware
+medium, lg, xl, 2xl, 3xl, 4xl, 5xl`). Fluid via `clamp()` — viewport-aware
   without media queries. Apply via `padding`, `margin`, or `gap`; never via
   width/height where it would clip the fluid scaling.
 - **Typography.** `--fs-0..10` for size,
@@ -188,8 +189,7 @@ When a block needs scoped CSS — colours, sizing, a hover state — the recipe 
    lives on a child component's rendered element. Reference tokens by name. Stay
    under ~80 lines.
 
-A working example is `src/lib/components/ui/SuedeButton.svelte` in any
-suede-family project. The `:global` wrapper, the `--hue-blue-500` →
+A working example is `src/lib/components/ui/Button.svelte`. The `:global` wrapper, the `--hue-blue-500` →
 `--hue-blue-600` hover transition, the `[href]` exception for the link variant,
 the `:focus-visible` outline using a token — that's the shape.
 
