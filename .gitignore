@@ -1,0 +1,53 @@
+node_modules
+
+# Output
+.output
+.vercel
+.netlify
+.wrangler
+/.svelte-kit
+/build
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.*
+!.env.example
+!.env.test
+
+# Vite
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# Cloudflare / Wrangler (generated)
+worker-configuration.d.ts
+.wrangler
+
+*storybook.log
+storybook-static
+
+# Deciduous database (local). The sync/ event log is the shared record in
+# multi-user setups (.pi/skills/decision-graph/SKILL.md, "Sync") and is the
+# one thing under .deciduous/ that gets committed.
+.deciduous/*
+!.deciduous/sync/
+
+# Deciduous exported web viewer (regenerated per machine via `deciduous sync`)
+docs/
+
+# Per-task scratch space (blog post drafts, planning notes, anything
+# the agent wants to write without committing). The compiled form
+# (graph nodes + PR description) is what persists. Handoff is the
+# tool for resuming work across machines.
+agent-notes/
+
+# Per-task working context (slice-briefs, kickoff follow-up notes). The
+# draft PR body carries the durable copy; the worktree copy dies with the
+# worktree (.pi/skills/slice-brief/SKILL.md, "File handling").
+tmp/
+
+# Deciduous database (local)
+.deciduous/

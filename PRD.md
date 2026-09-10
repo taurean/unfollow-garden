@@ -1,0 +1,432 @@
+# Follow triage: product requirements
+
+Status: draft for v1
+Date: 2026-09-10
+Owner: Taurean Bryant
+Build base: a copy of suede (SvelteKit on Cloudflare)
+Working name: Follow triage
+
+## Summary
+
+Follow triage lets a Bluesky user go through every account they follow, one at a time, and decide whether to keep following it. Each account is shown with enough context to make that call quickly: bio, avatar, whether they follow back, recent posts, replies, reposts and likes, how often they act, and when they last went quiet for a long stretch.
+
+Decisions are stored in the browser so a review of a few thousand accounts can span many sittings. When the review is done, the user signs in with atproto OAuth and unfollows the marked accounts in one run. Every run is recorded, so any account in it can be re-followed later.
+
+A working prototype exists (see "Prototype findings"). This document defines the version to build on suede for long-term maintenance.
+
+## Problem
+
+Follow lists drift. People stop posting, change what they post about, or move on, and the list keeps growing. Bluesky shows who you follow as a flat list with no activity context. Judging one account means opening the profile, scrolling, and guessing how active it is. Likes, which are most of some people's activity, aren't visible on other people's profiles at all.
+
+That is a few minutes per account. At 800 follows it doesn't get done.
+
+## Goals
+
+1. For most accounts, the user can make a keep or unfollow call from one screen without opening Bluesky.
+2. Review survives reloads, closed tabs, and days between sittings without losing a decision.
+3. Unfollowing is deliberate and recoverable. Nothing is deleted until the user reviews the full list. An interrupted run can resume. A completed run can be reversed.
+4. The app asks for the narrowest OAuth permission that covers its writes, and no data about the user leaves the browser except requests to atproto services.
+
+## Non-goals for v1
+
+- Syncing decisions across devices or browsers. Export and import cover moving between machines.
+- Rule-based bulk actions, such as "unfollow everyone inactive for 90 days." Every unfollow is an individual decision.
+- Managing lists, mutes, blocks, or followers.
+- Suggesting accounts to follow.
+- Any server-side storage of user data. The Cloudflare deployment serves static assets and OAuth client metadata only.
+- Authenticated reads. All account data comes from public endpoints.
+
+## Users
+
+The primary user is the owner: an experienced Bluesky user following several hundred to a few thousand accounts, working on a desktop browser with a keyboard.
+
+The app should work for any atproto account, including accounts on self-hosted PDSes, with nothing specific to bsky.social in the core flow. Mobile browsers must be usable but aren't the primary target.
+
+## Terms
+
+| Term | Meaning |
+| --- | --- |
+| Owner | The signed-in account whose follows are being reviewed. |
+| Subject | A followed account under review. |
+| Follow record | An `app.bsky.graph.follow` record in the owner's repo. One subject can have more than one. |
+| Decision | `keep` or `unfollow`, set by the user. `unfollowed` is set by the app after a run deletes the subject's follow records. |
+| Skip | Moves a subject to the end of the queue without deciding. Session-only by design. |
+| Lookback | How many days of activity to load per subject. Default 180. |
+| Gap threshold | The minimum length of an inactive stretch worth flagging. Default 30 days. |
+| Covered window | The period the loaded activity fully accounts for. See "Activity metrics." |
+| Run | One execution of unfollows, recorded with its targets and outcome. |
+
+## User stories
+
+Each story's acceptance criteria are its test list.
+
+### Sign in
+
+AUTH-1. The user signs in with their handle through atproto OAuth.
+- Entering a handle starts the OAuth flow against the authorization server for that account's PDS, including self-hosted ones.
+- The consent screen shows only the permission to create and delete follow records.
+- After sign-in, the app knows the owner's DID and PDS from the session and never asks for the handle again on that browser.
+- A denied or failed authorization returns to the sign-in screen with the error reason shown.
+
+AUTH-2. The session persists until it expires or the user signs out.
+- Reloading the page restores the session without a redirect.
+- When the session can't be refreshed, the user is sent back through OAuth. The triage position and all decisions are unchanged afterward.
+- Signing out revokes the session with the authorization server and clears tokens. Decisions stay unless the user deletes them separately (STORE-4).
+
+### Loading follows
+
+LOAD-1. After sign-in, the app loads every account the owner follows.
+- Follows are read from the owner's repo, not the AppView's follow list. Deleted, deactivated, and suspended accounts are included.
+- Profiles are loaded in batches of 25 and follow-back status in batches of 30.
+- Progress text states the current step and counts.
+- Accounts followed or unfollowed in another client since the last load are added or removed on the next load.
+
+LOAD-2. Activity loads for every subject in the background while the user reviews.
+- At most 4 subjects load at once.
+- Activity is cached for 24 hours per subject and lookback value. A reload within that time makes no activity requests.
+- One subject failing to load does not stop the others. The failure appears on that subject with the error message.
+- Rate-limited requests (HTTP 429) wait and retry, and the loading indicator says it is waiting.
+
+### Account view
+
+VIEW-1. The triage screen shows one subject with:
+- Avatar, display name, handle linked to the Bluesky profile, and bio with line breaks kept.
+- Whether the subject follows the owner.
+- Follower, following, and post counts, and the date the owner first followed them.
+- The activity summary and timeline strip defined in "Activity metrics."
+- The most recent posts, replies, reposts, and likes. Up to 8 of each for posts, replies, and reposts, and up to 10 likes. Each links to the post on Bluesky, and replies name who they reply to. Reposts and likes name the original author.
+- A note on posts that carry images, video, a link card, or a quote.
+
+VIEW-2. Subjects without a profile are shown as unavailable, with the DID and an explanation that the account may be deleted, deactivated, or suspended.
+
+VIEW-3. If a subject's PDS can't be read, the view says likes couldn't be loaded and why. The summary states that gap figures count posts, replies, and reposts only.
+
+### Triage
+
+TRI-1. The user decides with the keyboard or buttons.
+- Keys: `K` keep, `U` unfollow, `S` skip, `Z` undo. Keys are ignored while focus is in a text field or a modifier key is held.
+- The decision is written to storage before the next subject appears. If the write fails, the subject stays on screen and the error is shown.
+
+TRI-2. The queue shows the least recently active undecided subjects first.
+- Unavailable subjects and subjects whose activity failed to load come before all others.
+- A subject with no activity in the covered window sorts before any subject with activity.
+- The subject on screen never changes because of background loading.
+- While activity is still loading, "next" is chosen from what has loaded, and the header says the order will settle once loading finishes.
+
+TRI-3. Undo reverses the last decision or skip and returns to that subject.
+- The undo stack persists across reloads.
+- Subjects whose follow records were already deleted by a run are removed from the undo stack.
+
+TRI-4. When only skipped subjects remain, the user can review them again. When none remain, the screen offers the review step.
+
+TRI-5. The header shows how many subjects are undecided, kept, and marked for unfollow, plus activity loading progress.
+
+### Persistence
+
+STORE-1. Decisions, the undo stack, settings, and run records persist in IndexedDB, keyed by owner DID.
+
+STORE-2. The app requests persistent storage from the browser and shows the result in settings.
+- If persistence is denied, settings shows a plain explanation of what that means and links to export.
+
+STORE-3. Two tabs can't run the app for the same owner at once. A second tab shows a notice with an option to take over, which ends the session in the first tab.
+
+STORE-4. Settings has a way to delete all stored data for the owner, with a confirmation step.
+
+### Review and unfollow
+
+RUN-1. The review screen lists every subject marked for unfollow with avatar, name, handle, and last-active time. Each can be switched to keep.
+
+RUN-2. Starting a run creates a run record before any delete request.
+- The record stores each target's DID, handle, display name, and follow record rkeys, read fresh from the owner's repo at run start.
+- Targets with no follow record left are marked `unfollowed` without a request, since they were unfollowed elsewhere.
+
+RUN-3. Deletes are sent with `com.atproto.repo.applyWrites` in batches of up to 100.
+- After each batch, the run record and the affected decisions are updated before the next batch is sent.
+- Progress shows follow records removed out of the total.
+
+RUN-4. An interrupted run can resume. Causes include a closed tab, a network failure, or an expired session.
+- On next load, an unfinished run is offered for resumption.
+- Resuming re-reads the owner's repo and only deletes records that still exist.
+
+RUN-5. The user can download the target list of any run as JSON.
+
+### Restore
+
+RESTORE-1. The runs screen lists past runs with date and target count. From a run, the user can re-follow all targets or chosen ones.
+- Re-following creates a new follow record per subject.
+- The screen states that re-followed accounts will be notified and that the original follow date is not recovered.
+- Re-followed subjects get the decision `keep`.
+
+### Backup
+
+BACKUP-1. The user can export decisions, settings, the undo stack, and run records to a versioned JSON file. The activity cache is not exported.
+
+BACKUP-2. The user can import that file into the same owner account.
+- A file for a different owner DID is rejected, and the error names both DIDs.
+- When both sides have a decision for the same subject, the one with the later `decidedAt` wins.
+- The import reports what it added, updated, and skipped.
+
+## Activity metrics
+
+These definitions are the contract for `activity-stats`. They are unit tested independently of the UI.
+
+### Events
+
+Each subject's posts, replies, reposts, and likes are merged into one timeline of events, each with a kind and a timestamp.
+
+| Kind | Source | Timestamp |
+| --- | --- | --- |
+| Post | Author feed item without a reply reference or repost reason | Earlier of the record's `createdAt` and the AppView's `indexedAt` |
+| Reply | Author feed item whose record has a reply reference | Same as post |
+| Repost | Author feed item with a repost reason | The repost reason's `indexedAt` |
+| Like | `app.bsky.feed.like` record in the subject's repo | The record's `createdAt` |
+
+Posts use the earlier of the two timestamps, which is how the AppView orders author feeds. Backdated imports keep their claimed date, and future-dated posts can't sort ahead of real ones. Like records whose `createdAt` doesn't parse are dropped, since they can't be placed in time.
+
+### Covered window
+
+- The lookback start is now minus the lookback.
+- The loading start is the later of the lookback start and the subject's account creation date.
+- Each source (author feed, likes) loads at most 5 pages of 100. A source that hits the cap before reaching the loading start covers only back to its oldest item.
+- The covered window starts at the latest of these starts and ends at load time. It is truncated when a page cap, rather than the lookback or account age, set the start.
+
+Only events inside the covered window count toward any metric. Without this, a subject who likes 300 posts a day would look inactive before yesterday.
+
+### Metrics
+
+| Metric | Definition |
+| --- | --- |
+| Last active | The latest event time. Null if the window has no events. |
+| Typical gap | Median of the times between consecutive events, shown with the mean. The median leads because one long absence skews the mean. Needs at least 2 events. |
+| Long gaps | Every stretch without events that is at least the gap threshold. This includes the stretch from the last event to load time, marked ongoing. When the window is not truncated, it also includes the stretch from the window start to the first event. That stretch is marked "at least" if the window starts at the lookback boundary. If it starts at account creation, it is exact. |
+| Latest long gap | The most recent long gap. |
+| Counts | Events per kind inside the covered window. |
+
+Changing the gap threshold recomputes metrics from cached events without refetching. Changing the lookback invalidates the cache.
+
+### Timeline strip
+
+The strip spans the full lookback. It has one row per kind with a tick per event, month boundaries, and shaded bands for long gaps. The part of the lookback outside the covered window is hatched and labeled either "not loaded (fetch limit reached)" or "before the account existed." The strip is the visual center of the account view.
+
+## Data sources
+
+All reads are public and unauthenticated. The AppView is `https://public.api.bsky.app`.
+
+| Data | Endpoint | Host |
+| --- | --- | --- |
+| Owner's follow records and rkeys | `com.atproto.repo.listRecords` on `app.bsky.graph.follow` | Owner's PDS |
+| Profiles | `app.bsky.actor.getProfiles`, 25 per request | AppView |
+| Follows the owner | `app.bsky.graph.getRelationships`, 30 per request | AppView |
+| Posts, replies, reposts | `app.bsky.feed.getAuthorFeed` with `filter=posts_with_replies` | AppView |
+| Subject's PDS | DID document from `plc.directory`, or `/.well-known/did.json` for `did:web` | PLC or subject's domain |
+| Likes | `com.atproto.repo.listRecords` on `app.bsky.feed.like` | Subject's PDS |
+| Liked post content | `app.bsky.feed.getPosts`, fetched when the subject is displayed | AppView |
+
+Authenticated writes go through the OAuth session to the owner's PDS:
+
+| Action | Endpoint |
+| --- | --- |
+| Unfollow | `com.atproto.repo.applyWrites` with delete operations on `app.bsky.graph.follow` |
+| Re-follow | `com.atproto.repo.applyWrites` with create operations on `app.bsky.graph.follow` |
+
+## Authentication
+
+### Decision: public browser OAuth client
+
+Use `@atproto/oauth-client-browser` as a public client that runs entirely in the browser.
+
+The alternative is a confidential client in a Cloudflare Worker. That brings longer sessions (up to 180 days instead of 14) at the cost of a signing key, a JWKS endpoint, server-side session storage, and a server in the request path for every write. This app writes only during runs and is used occasionally. A 14-day session that sometimes needs re-authorization costs less than operating that backend, and it keeps "no user data on a server" true.
+
+### Decision: sign in first
+
+Sign-in is the first screen. The OAuth flow asks for a handle anyway, so a separate handle field would duplicate it. The session also provides a verified DID and PDS, which removes the handle-resolution step and the bsky.social entryway special case the prototype needed. The cost is that the consent screen mentions follow deletion before the user has reviewed anything. The sign-in screen should explain that nothing is changed until the user starts a run.
+
+### Scope
+
+```
+atproto repo:app.bsky.graph.follow?action=create&action=delete
+```
+
+`delete` covers unfollowing. `create` covers restore (RESTORE-1). Asking for both up front avoids a second consent flow the first time the user restores.
+
+The app must not request `transition:generic`.
+
+### Client metadata
+
+- In production, `client_id` is `https://<deployed origin>/oauth-client-metadata.json`, served by the suede app. It sets `application_type: "web"`, `token_endpoint_auth_method: "none"`, `dpop_bound_access_tokens: true`, the scope above, and one redirect URI on the same origin.
+- In development, use the loopback client: `client_id` of `http://localhost` with the scope and a `redirect_uri` on `http://127.0.0.1:<port>`. The app must be opened at `127.0.0.1`, not `localhost`. The library redirects automatically.
+- The metadata is generated from one config module so the scope string exists in one place.
+
+### Sessions
+
+The OAuth library stores DPoP keys and tokens in its own IndexedDB database. App code never reads or stores tokens. All writes use the session's fetch handler, which targets the owner's PDS.
+
+## Local storage
+
+### Requirements
+
+- Decisions survive reloads, browser restarts, and closed tabs.
+- A decision is written before the UI treats it as saved.
+- The schema can change without losing decisions.
+- The user can get their data out, and back in, without the app.
+- The app detects and states when storage might be evicted.
+
+### Decision: IndexedDB through `idb`
+
+IndexedDB is transactional, handles the data size (a few MB of cached activity for thousands of subjects), and has versioned upgrades built in. `idb` is a thin promise wrapper with typed schemas and no query layer to learn.
+
+Alternatives considered:
+
+- localStorage, used by the prototype. It is synchronous, limited to about 5 MB, has no transactions, and is evicted on the same terms as IndexedDB. Rejected.
+- SQLite in WASM on OPFS. It adds a WASM download of about 1 MB and worker plumbing, and some storage backends need cross-origin isolation headers. The data has no relational queries that justify it. Rejected for v1.
+- Records in the owner's atproto repo. Repo records are public, and a list of people someone plans to unfollow must not be. Rejected.
+- Cloudflare D1. It would provide multi-device sync, but needs server-side auth and puts user data on a server, which contradicts goal 4. Deferred.
+
+### Schema, version 1
+
+Database name `follow-triage`. Keys that include the owner DID keep data for multiple accounts separate.
+
+| Store | Key | Value |
+| --- | --- | --- |
+| `settings` | `ownerDid` | lookbackDays, thresholdDays |
+| `decisions` | `[ownerDid, subjectDid]` | decision, decidedAt |
+| `undo` | `ownerDid` | ordered list of subject DIDs |
+| `follows` | `[ownerDid, subjectDid]` | profile snapshot, follow rkeys, first followed date, follows-owner flag, loadedAt |
+| `activity` | `subjectDid` | events, recent entries, covered window, lookbackDays, fetchedAt, likes error if any |
+| `runs` | `id` | ownerDid, kind (`unfollow` or `refollow`), createdAt, status, targets with rkeys, completed rkeys, error |
+
+`runs` has an index on `ownerDid`. Activity is not keyed by owner because it describes the subject, and sharing it between owners on one browser is harmless.
+
+### Resilience measures
+
+- Call `navigator.storage.persist()` after the first decision, and show the result in settings. Chromium grants it by heuristic. Firefox asks the user. Safari may clear script-written storage for sites not visited for 7 days, so settings recommends export for Safari users.
+- Every schema change is a numbered migration in the upgrade handler. A migration may transform `decisions` and `runs` but never drop them. Each migration has a test that opens a database at the previous version with fixture data and checks the result.
+- Decision writes and their undo-stack update happen in one transaction.
+- Run progress is written per batch, so a crash loses at most one batch's bookkeeping, and resumption re-reads the repo to reconcile.
+- Web Locks enforce one active tab per owner (STORE-3). A run holds its own lock for its duration.
+- Export files carry `formatVersion`, `ownerDid`, and `exportedAt`. Import validates all three before touching storage.
+
+## Architecture on suede
+
+The app is client-rendered. Routes set `ssr = false`. The only server-generated output is `oauth-client-metadata.json`, which can be a static file per environment or a `+server.ts` route built from the configured origin. Adapt the module layout below to suede's conventions during kickoff.
+
+```
+src/lib/
+  atproto/
+    xrpc.ts            query/procedure helpers, 429 handling, error type
+    identity.ts        DID document fetch, PDS lookup (subjects only)
+    graph.ts           follow records, profiles, relationships
+    activity.ts        author feed, likes, liked posts, event extraction
+    oauth.ts           client setup, sign in/out, session restore
+    writes.ts          batched follow deletes and creates
+  stats/
+    activity-stats.ts  metric definitions from this document
+  storage/
+    db.ts              schema, migrations, typed accessors
+    backup.ts          export/import format and validation
+    locks.ts           Web Locks wrappers
+  triage/
+    session.svelte.ts  queue, decisions, undo, background scan
+    runs.svelte.ts     run creation, execution, resume, restore
+  components/          sign-in, triage, account, activity panel, strip, review, runs, settings
+```
+
+Rules carried from the prototype:
+
+- The subject on screen is state, set only by user actions and by filling an empty screen. It is never derived from the queue.
+- Background loading writes to reactive state per subject (`SvelteMap`), not a deep-proxied object holding thousands of event arrays.
+- Values written to IndexedDB are plain objects captured before entering reactive state, or passed through `$state.snapshot`. Svelte proxies can't be structured-cloned.
+- Errors from third-party PDSes are shown on the affected subject. Errors from the owner's PDS or the AppView during loading stop the load and are shown on the loading screen.
+
+## Interface
+
+Screens: sign in, loading, triage, review, run progress, runs, settings.
+
+Visual direction:
+
+- Group with whitespace, not borders, cards, or panels.
+- No shadows or other depth effects.
+- One typeface, chosen for legibility at small sizes. Numbers use tabular figures where they line up.
+- The timeline strip carries the visual weight. Everything else is quiet.
+- Keep and unfollow use distinct colors, and state is never conveyed by color alone.
+- Light and dark schemes follow the system setting.
+
+Quality floor: visible keyboard focus, reduced motion respected, WCAG AA contrast, usable at 360 px wide, and every action reachable without a pointer.
+
+Copy uses sentence case and names actions by what they do: "Unfollow 42 accounts," then "Unfollowed 42 accounts." Errors state what failed and what to do next.
+
+## Edge cases
+
+| Case | Behavior |
+| --- | --- |
+| Duplicate follow records for one subject | All rkeys are deleted in a run. The first followed date is the earliest record. |
+| Follow record with unparseable `createdAt` | Followed date is hidden. The record is still deleted in runs. |
+| Subject changed handle since last load | Profiles reload each session, and runs store the handle at run time. |
+| Subject deleted between load and run | Still unfollowed, since the follow record is in the owner's repo. |
+| Subject unfollowed in another client before a run | Marked `unfollowed` at run start with no request. |
+| New follow added in another client | Appears after the next load as undecided. |
+| Stored decision for a subject no longer followed | Kept in storage but excluded from counts and queue. Removed by "delete all data." |
+| `did:web` subject whose domain is down | Likes error on that subject. Posts still load from the AppView. |
+| Subject's PDS lacks CORS headers | Same as above. |
+| Session expires mid-run | Run pauses as interrupted. After re-authorization it resumes (RUN-4). |
+| Owner's authorization server rejects the scope | Sign-in shows the server's error and the requested scope. No broader scope is requested automatically. |
+| Very large follow count (5,000+) | The first load takes several minutes. Triage starts as soon as the first subjects load. |
+
+## Performance and limits
+
+- Per subject, the first load makes 1 PLC request, 1 to 5 author feed requests, and 1 to 5 like requests. A typical account needs about 3 requests.
+- Scan concurrency is 4 subjects. For 1,000 follows, expect roughly 3,000 to 4,000 requests spread over the AppView, PLC, and many PDSes.
+- On 429, wait until the `RateLimit-Reset` header's time when the browser can read it, otherwise 30 seconds, for up to 4 retries per request.
+- Account view renders under 100 ms from cached data. Timeline ticks are capped at 1,000 per subject by the page limits.
+
+## Privacy and security
+
+- No analytics, telemetry, or third-party scripts.
+- Data leaves the browser only as requests to the AppView, PLC, subjects' PDSes, and the owner's PDS and authorization server.
+- Tokens are DPoP-bound and managed by the OAuth library. App code never handles credentials.
+- The deployed app sends a Content Security Policy. `connect-src` must allow any HTTPS origin, because subjects' PDSes are arbitrary hosts.
+- Decisions and runs never leave the browser except through a user-initiated export.
+
+## Release slices
+
+Each slice ships on its own and leaves the app usable.
+
+1. OAuth sign-in, loading follows and profiles, a basic account view, and decisions persisted in IndexedDB. This slice includes the storage schema, migration harness, and Web Locks.
+2. Activity loading, stats, the timeline strip, recent items, and the activity cache.
+3. Queue ordering, undo persistence, skip, and storage persistence status.
+4. Review, unfollow runs with resume, and run list download.
+5. Restore from runs, export and import, and delete all data.
+
+## Risks
+
+- Authorization servers on older self-hosted PDSes may not support granular scopes. Those users can't sign in until their PDS updates. A silent fallback to `transition:generic` is ruled out. If this blocks real users, handle it as an explicit, visible choice.
+- Some PDSes don't send CORS headers, so likes are missing for their accounts. The UI states this per subject, so decisions aren't made on silently partial data.
+- Public AppView rate limits are per IP and may change. The 429 handling bounds the damage, but a first scan of several thousand follows could take a long time.
+- Safari's storage eviction can erase decisions for users who don't return within a week. Export is the mitigation, and settings says so.
+- Re-follows notify the subject. Restore is a real undo for the follow graph but not an invisible one, and the UI must say that before acting.
+
+## Open questions
+
+1. Should restore ship in v1? It is why the scope includes `create`. If restore moves to a later version, drop `create` from the scope and accept a second consent flow later.
+2. Should the review queue support filters, such as "doesn't follow me" or "inactive 90+ days," as a way to order work? This would still require individual decisions. Leaning toward a later version.
+3. Where will this deploy, and under what name? The `client_id` URL is the app's identity to authorization servers and appears on the consent screen, so it should be settled before slice 1 ships to production.
+
+## Prototype findings
+
+The prototype (SvelteKit, client-only, app-password auth) was exercised in a browser against mocked endpoints. The mocks covered queue order, keyboard triage, undo, duplicate follow records, a failing third-party PDS, and batched deletes. The metrics definitions above match its tested behavior.
+
+Not yet confirmed against the live network:
+
+- `app.bsky.graph.getRelationships` works without auth on the public AppView.
+- `com.atproto.repo.listRecords` returns newest first by default on current PDS versions.
+- CORS behavior of third-party PDSes in practice.
+
+OAuth removes one prototype assumption entirely: routing app-password sessions for `*.host.bsky.network` accounts through the bsky.social entryway.
+
+What changes from the prototype:
+
+- App passwords are replaced by OAuth with a scope limited to follow records.
+- localStorage is replaced by versioned IndexedDB with export and import.
+- Runs are recorded, resumable, and reversible.
+- The undo stack persists.
+- One active tab per owner is enforced.
