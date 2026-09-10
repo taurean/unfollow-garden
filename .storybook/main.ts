@@ -1,7 +1,9 @@
 import type { StorybookConfig } from '@storybook/sveltekit';
 
 const config: StorybookConfig = {
-	stories: ['../src/**/*.mdx', '../src/**/*.stories.@(js|ts|svelte)'],
+	// Docs pages come from the `autodocs` tag on each story. There are no
+	// standalone .mdx files, and globbing for them warns on every test run.
+	stories: ['../src/**/*.stories.@(js|ts|svelte)'],
 	addons: [
 		'@storybook/addon-svelte-csf',
 		'@chromatic-com/storybook',

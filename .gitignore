@@ -51,3 +51,8 @@ tmp/
 
 # Deciduous database (local)
 .deciduous/
+
+# CLAUDE.md and .claude/ are tracked. Suede ignored them so that AGENTS.md
+# could be the one harness-neutral instruction file; this project dropped
+# AGENTS.md and the .pi/ layer at kickoff and standardized on Claude, so the
+# rulebook and the in-repo skills are project files like any other.

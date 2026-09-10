@@ -1,3 +1,9 @@
+---
+name: narratives
+description: >
+  Understand how the system evolved by reading narratives, treating commits as evidence rather than as the record. Use when tracing why the code arrived at its current shape.
+---
+
 # Narrative Tracking
 
 **Narratives are the source of truth. Commits are just evidence.**
@@ -27,6 +33,7 @@ Edit `.deciduous/narratives.md`. For each section:
 5. Check attached documents (`deciduous doc list`) - diagrams or specs may provide evidence
 
 Signs of a pivot:
+
 - Two approaches coexisting (migration in progress)
 - Comments explaining "we used to do X"
 - Config for old + new system
@@ -52,11 +59,13 @@ Each narrative section in `.deciduous/narratives.md`:
 
 ```markdown
 ## <Name>
+
 > <One sentence: what this piece of the system does>
 
 **Current state:** <How it works today>
 
 **Evolution:**
+
 1. <First approach> - <why>
 2. **PIVOT:** <what changed> - <why it changed>
 3. <Current approach> - <why this is better>

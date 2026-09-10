@@ -36,7 +36,7 @@ git diff <fixed-point>...HEAD      # three-dot: compares against the merge-base
 git log <fixed-point>..HEAD --oneline
 ```
 
-Pass the diff *command* to the subagents, not its output. They run it
+Pass the diff _command_ to the subagents, not its output. They run it
 themselves. Reading the diff into this context before dispatching defeats the
 isolation and costs you the context you need for aggregation.
 
@@ -74,11 +74,11 @@ Collect paths, don't read them. The Standards subagent reads its own sources.
 Issue all three Task calls **in a single message** so they run concurrently.
 Each agent carries its own brief, so pass inputs only.
 
-| Agent | Inputs |
-| --- | --- |
-| `standards-reviewer` | diff command, commit list, standards-source paths |
-| `spec-reviewer` | diff command, commit list, spec path or fetched contents |
-| `discipline-reviewer` | diff command, commit list |
+| Agent                 | Inputs                                                   |
+| --------------------- | -------------------------------------------------------- |
+| `standards-reviewer`  | diff command, commit list, standards-source paths        |
+| `spec-reviewer`       | diff command, commit list, spec path or fetched contents |
+| `discipline-reviewer` | diff command, commit list                                |
 
 `discipline-reviewer` loads the `engineering-discipline` skill itself — don't
 paste rules into its message.

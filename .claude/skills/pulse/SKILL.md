@@ -1,3 +1,9 @@
+---
+name: pulse
+description: >
+  Map the current design of the system as decisions — what is true now, with no history. Use when asking what the decision graph says about the code as it stands today.
+---
+
 # Pulse
 
 **Map the current model as decisions. No history, just now.**

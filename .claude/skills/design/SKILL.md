@@ -7,8 +7,8 @@ description: >
   screen, a component's appearance, or any UI where the question is what it
   should look like rather than where the rule goes.
 paths:
-  - "**/*.svelte"
-  - "src/lib/styles/**"
+  - '**/*.svelte'
+  - 'src/lib/styles/**'
 ---
 
 # Design
