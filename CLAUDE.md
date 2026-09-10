@@ -1,20 +1,42 @@
-# CLAUDE.md — suede
+# CLAUDE.md — unfollow-garden
 
 Project rulebook. Read at task start.
 
-## Suede overview
+## Project overview
 
-Suede is an opinionated SvelteKit starter template for shipping full-stack apps
-on Cloudflare. It exists to give every project forked from it a consistent
-process pipeline — from concept through release — with defined git conventions,
-authoring boundaries, and decision tracking baked in from day one. Forks inherit
-the mechanics and tailor the details (version scheme, commit types, tracker
-setup) during their own kickoff.
+unfollow-garden lets a Bluesky user review every account they follow, one at a
+time, and decide whether to keep following it. Each account is shown with enough
+context — bio, follow-back status, recent posts, replies, reposts, likes, and
+how long its quiet stretches run — to make the call from one screen without
+opening Bluesky.
+
+Decisions live in the browser, so a review of a few thousand accounts can span
+many sittings. When the review is done, the user signs in with atproto OAuth and
+unfollows the marked accounts in one recorded, resumable, reversible run.
+
+`PRD.md` is the spec. It owns the user stories, the activity-metric definitions,
+and the storage schema; this file owns how work on it gets done. Where the two
+disagree about product behaviour, the PRD wins.
+
+**Two constraints shape everything:** no user data reaches a server, and every
+unfollow is an individual decision. There is no server-side storage, no
+rule-based bulk action, and no analytics. The Cloudflare deployment serves
+static assets and OAuth client metadata, nothing else.
+
+This project was forked from [suede](https://github.com/taurean/suede) at
+`2026.7.3.3`; `package.json#suede.from` records the lineage. The process
+pipeline below is suede's, tailored during kickoff.
 
 ## Stack
 
-SvelteKit · Cloudflare Pages + Workers · D1 + Drizzle · Vitest + Playwright ·
-pnpm · stylebase + Bits UI · Storybook.
+SvelteKit · Cloudflare Pages + Workers · Vitest + Playwright · pnpm ·
+stylebase + Bits UI · Storybook.
+
+The app is client-rendered: routes set `ssr = false`, and the only
+server-generated output is `oauth-client-metadata.json`. D1 and Drizzle were
+ripped during kickoff — persistence is IndexedDB in the browser, per the PRD's
+no-server-storage constraint. Adding a database back is a decision to
+re-litigate that constraint, not a wiring change.
 
 ## Git workflow
 
@@ -52,8 +74,7 @@ reserved for the version-bump commit — see **Releases**.
 dependency) · `ci` (CI configuration) · `perf` (performance) · `style`
 (formatting, no logic change).
 
-A fork that extends or trims the list records the override during
-`/suede-kickoff`. The
+The list is inherited from suede unchanged — kickoff recorded no override. The
 [spec](https://www.conventionalcommits.org/en/v1.0.0/) is upstream; the list is
 restated here so the agent doesn't fetch it on first use.
 
@@ -73,19 +94,20 @@ project's tracker, and merged PR history. There is no per-task markdown note.
 
 ## Constant process pipeline
 
-The workflow below ships to every fork. The _process_ is constant; the _details_
-are tailored per fork during `/suede-kickoff`. Don't invent a new pipeline; if a
-stage doesn't fit a task, compress it but keep the shape.
+Inherited from suede and tailored at kickoff. Don't invent a new pipeline; if a
+stage doesn't fit a task, compress it but keep the shape. No stage is compressed
+for this project — the PRD's five release slices are multi-PR work, so stage 3
+fires for real.
 
-| Stage | Home | When |
-| --- | --- | --- |
-| 1. **Concept** — in conversation, an issue, or a bug report | — | Always; the input to the pipeline |
-| 2. **Align** on goal, boundary, reversibility, and review posture | `/task` step 1 | Every task. Short back-and-forth per `/poke-holes` |
-| 3. **Cut plan** | `/project-plan` | Only when the work cannot land as one PR. One plan issue with a cut checklist, never an issue per cut |
-| 4. **Build** | `/task` | Every task: prep (worktree, systems map, brief, draft PR), then vertical slices with story-derived tests |
-| 5. **Verify** | `/verify` | Every task, before review. The app observed doing the thing, not a green suite |
-| 6. **Review** | `/review` | Three-axis review — Standards, Spec, Discipline — in parallel subagents, before merge |
-| 7. **Release** | This file, "Releases" | Version bump as the final commit on the release branch; human tags the merge commit on `main` |
+| Stage                                                             | Home                  | When                                                                                                     |
+| ----------------------------------------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------- |
+| 1. **Concept** — in conversation, an issue, or a bug report       | —                     | Always; the input to the pipeline                                                                        |
+| 2. **Align** on goal, boundary, reversibility, and review posture | `/task` step 1        | Every task. Short back-and-forth per `/poke-holes`                                                       |
+| 3. **Cut plan**                                                   | `/project-plan`       | Only when the work cannot land as one PR. One plan issue with a cut checklist, never an issue per cut    |
+| 4. **Build**                                                      | `/task`               | Every task: prep (worktree, systems map, brief, draft PR), then vertical slices with story-derived tests |
+| 5. **Verify**                                                     | `/verify`             | Every task, before review. The app observed doing the thing, not a green suite                           |
+| 6. **Review**                                                     | `/review`             | Three-axis review — Standards, Spec, Discipline — in parallel subagents, before merge                    |
+| 7. **Release**                                                    | This file, "Releases" | Version bump as the final commit on the release branch; human tags the merge commit on `main`            |
 
 **Always-on supporting layer** — not stages, they run throughout:
 
@@ -99,14 +121,10 @@ stage doesn't fit a task, compress it but keep the shape.
   creation, and the visual contract; agents author markup and scoped CSS within
   it.
 
-The pipeline is the same regardless of project shape or formality. Stage 3 fires
-only for multi-PR work.
-
-**Tracker.** Stages 3 and 6 assume **GitHub Issues** — where `/project-plan`
-publishes the plan issue and `/review` reads specs. When no tracker is
-configured, the plan lives in the first cut's PR description and review falls
-back to the PR body's brief. Another git host may be added as a mirror, but is
-not a substitute for the tracker.
+**Tracker.** **GitHub Issues** on `taurean/unfollow-garden` (private).
+`/project-plan` publishes the plan issue there and `/review` reads specs from
+it. Another git host may be added as a mirror, but is not a substitute for the
+tracker.
 
 ## Authoring boundaries
 
@@ -126,7 +144,7 @@ not a substitute for the tracker.
   typography from stylebase properties and `u:` utilities.
 - Layout, spacing, and typography — within the stylebase vocabulary.
 - All TypeScript: `<script lang="ts">`, `*.ts` in `src/lib/` and `src/routes/`,
-  Drizzle schemas and queries, server routes, API integrations, Workers.
+  the atproto and storage layers, API integrations, Workers.
 
 **Hard constraints**, non-negotiable without the human:
 
@@ -138,8 +156,8 @@ not a substitute for the tracker.
   behaviour is the point of wrapping it.
 
 Mechanics — which layer a rule goes in, which token, which primitive — are in
-the `writing-css` skill. This section owns *who decides*; that skill owns *where
-it goes*.
+the `writing-css` skill. This section owns _who decides_; that skill owns _where
+it goes_.
 
 **Prototypes are the exception.** Throwaway variant components and prototype
 routes may be agent-authored, provided they're clearly marked and deleted when
@@ -155,9 +173,9 @@ and any new state, prop, or visual branch added in code is a story-add or
 story-edit. A primitive without a matching story is invisible to QA and to the
 next contributor.
 
-Storybook is the suede default. A fork that rips it records the override during
-kickoff, and the follow-up rewrites this section and the `task` skill's
-references.
+Storybook is retained for this project. The PRD's timeline strip has enough
+rendered states — truncated window, hatched pre-account region, ongoing gap, no
+events at all — that they need somewhere to be looked at side by side.
 
 ## Working style
 
@@ -172,13 +190,16 @@ In-repo skills (`.claude/skills/`):
 - `review` — three-axis review, dispatching to global reviewer agents.
 - `writing-css` — CSS and component markup in stylebase + Bits UI. Loads
   automatically on `.svelte` and CSS files.
-- `suede-kickoff` — reset a fresh suede clone into a standalone project. Deletes
-  itself when consumed.
+- `design` — visual design work against the human-owned contract.
 
 Global skills ride in from the user's environment and are not enumerated here.
 `engineering-discipline`, `poke-holes`, and `systems-map` are the ones this
 pipeline depends on — `systems-map` is global rather than in-repo, since a
 personal skill shadows a project skill of the same name.
+
+`atprotocol-oauth` is the global skill for the OAuth work in slice 1. Load it
+rather than deriving `@atproto/oauth-client-browser` setup from scratch; the
+browser-app branch is the one this project needs.
 
 `deciduous update` maintains its own commands and hooks under `.claude/`.
 
@@ -192,17 +213,14 @@ Verification and release mechanics have their own sections below. The merge to
 
 ## Releases
 
-Suede uses [chronver](https://chronver.org) by default. Version lives in
+This project uses [chronver](https://chronver.org). Version lives in
 `package.json#version`, format `YYYY.M.D[.N][-feature|-break]`. `pnpm version`
 normalizes leading zeros — `2026.6.4`, not `2026.06.04`.
 
-**The mechanics are constant across forks; the scheme is a fork-time decision.**
 Mechanics: every release branch ships as its own version bump; the bump is the
 final commit before merge; the merge commit on `main` is tagged with the bare
 version string, annotated, and pushed with `--follow-tags`; the changelog is
-`git log <prev>..<new>`, with no `CHANGELOG.md`. The scheme is a kickoff
-question — chronver for apps and templates, semver for libraries consumed by
-dependents.
+`git log <prev>..<new>`, with no `CHANGELOG.md`.
 
 **No versionless merges.** Every branch ready to merge to `main` ships as its
 own version.
@@ -221,15 +239,16 @@ own version.
    with `git push origin main --follow-tags`.
 4. `git log <prev>..<new>` is the changelog.
 
-### Downstream lineage
+### Upstream lineage
 
-A project forked from suede adds `"suede": { "from": "<tag>" }` to its own
-`package.json`, carrying the chronver tag of the commit it branched from.
-Suede's own `package.json` has no such field.
+`package.json#suede` carries `{ "from": "2026.7.3.3" }` — the chronver tag of
+the suede commit this project branched from. It is a record, not a link: there
+is no merge path back upstream, and suede moving on does not oblige this project
+to follow.
 
 ## Decision graph
 
-Suede tracks project decisions with `deciduous`. `deciduous update` writes and
+This project tracks decisions with `deciduous`. `deciduous update` writes and
 maintains its own Decision Graph Workflow section in this file, along with the
 commands and hooks under `.claude/`. It preserves custom content, so the house
 conventions below sit alongside the generated section rather than replacing it.
@@ -268,12 +287,23 @@ Never:
 - Edit markup or styles in a way the authoring boundaries forbid.
 - Skip the PR description.
 - Commit secrets.
+- Broaden the OAuth scope. It is
+  `atproto repo:app.bsky.graph.follow?action=create&action=delete` and nothing
+  else. `transition:generic` grants full account write access and is never a
+  fallback for an authorization server that rejects granular scopes — that
+  failure is shown to the user, not worked around.
+- Store user data on a server, or add analytics, telemetry, or a third-party
+  script. Both are PRD non-goals, not preferences.
+- Send an authenticated read. Every account lookup uses public endpoints; the
+  OAuth session is for writes during runs only.
 
 ## Verification before completion
 
 - `pnpm lint` — pass
 - `pnpm check` — pass
-- `pnpm test` — run if tests changed
+- `pnpm test` — run if tests changed. The activity-metric definitions in
+  `PRD.md` are unit tested independently of the UI; a change to them without a
+  matching test change is incomplete.
 - `/verify` — the app observed doing the thing. A green suite is necessary and
   not sufficient; tests written against code written in the same context share a
   common ancestor.
@@ -283,31 +313,32 @@ Never:
 Claim done with evidence: command plus result.
 
 <!-- deciduous:start -->
+
 ## Decision Graph Workflow
 
 **THIS IS MANDATORY. Log decisions IN REAL-TIME, not retroactively.**
 
 ### Available Slash Commands
 
-| Command | Purpose |
-|---------|---------|
-| `/decision` | Manage decision graph - add nodes, link edges, sync |
-| `/recover` | Recover context from decision graph on session start |
-| `/work` | Start a work transaction - creates goal node before implementation |
-| `/document` | Generate comprehensive documentation for a file or directory |
-| `/build-test` | Build the project and run the test suite |
-| `/serve-ui` | Start the decision graph web viewer |
-| `/sync-graph` | Export decision graph to GitHub Pages |
-| `/decision-graph` | Build a decision graph from commit history |
-| `/sync` | Multi-user sync - pull events, rebuild, push |
+| Command           | Purpose                                                            |
+| ----------------- | ------------------------------------------------------------------ |
+| `/decision`       | Manage decision graph - add nodes, link edges, sync                |
+| `/recover`        | Recover context from decision graph on session start               |
+| `/work`           | Start a work transaction - creates goal node before implementation |
+| `/document`       | Generate comprehensive documentation for a file or directory       |
+| `/build-test`     | Build the project and run the test suite                           |
+| `/serve-ui`       | Start the decision graph web viewer                                |
+| `/sync-graph`     | Export decision graph to GitHub Pages                              |
+| `/decision-graph` | Build a decision graph from commit history                         |
+| `/sync`           | Multi-user sync - pull events, rebuild, push                       |
 
 ### Available Skills
 
-| Skill | Purpose |
-|-------|---------|
-| `/pulse` | Map current design as decisions (Now mode) |
-| `/narratives` | Understand how the system evolved (History mode) |
-| `/archaeology` | Transform narratives into queryable graph |
+| Skill          | Purpose                                          |
+| -------------- | ------------------------------------------------ |
+| `/pulse`       | Map current design as decisions (Now mode)       |
+| `/narratives`  | Understand how the system evolved (History mode) |
+| `/archaeology` | Transform narratives into queryable graph        |
 
 ### The Node Flow Rule - CRITICAL
 
@@ -337,14 +368,14 @@ AUDIT regularly -> Check for missing connections
 
 ### Behavioral Triggers - MUST LOG WHEN:
 
-| Trigger | Log Type | Example |
-|---------|----------|---------|
-| User asks for a new feature | `goal` **with -p** | "Add dark mode" |
-| Exploring possible approaches | `option` | "Use Redux for state" |
-| Choosing between approaches | `decision` | "Choose state management" |
-| About to write/edit code | `action` | "Implementing Redux store" |
-| Something worked or failed | `outcome` | "Redux integration successful" |
-| Notice something interesting | `observation` | "Existing code uses hooks" |
+| Trigger                       | Log Type           | Example                        |
+| ----------------------------- | ------------------ | ------------------------------ |
+| User asks for a new feature   | `goal` **with -p** | "Add dark mode"                |
+| Exploring possible approaches | `option`           | "Use Redux for state"          |
+| Choosing between approaches   | `decision`         | "Choose state management"      |
+| About to write/edit code      | `action`           | "Implementing Redux store"     |
+| Something worked or failed    | `outcome`          | "Redux integration successful" |
+| Notice something interesting  | `observation`      | "Existing code uses hooks"     |
 
 ### What NOT to Log - CRITICAL
 
@@ -353,6 +384,7 @@ AUDIT regularly -> Check for missing connections
 Nodes should capture what the user is building, choosing, and accomplishing. Do NOT create nodes for your own thinking, planning, or tooling steps.
 
 **DO NOT create nodes for:**
+
 - Reading/exploring the codebase ("Analyzing project structure", "Reading config files")
 - Your planning process ("Planning implementation approach", "Evaluating options internally")
 - Tool usage ("Running tests to check status", "Checking git log")
@@ -360,6 +392,7 @@ Nodes should capture what the user is building, choosing, and accomplishing. Do 
 - Meta-commentary ("Starting work on this task", "Preparing to implement")
 
 **DO create nodes for:**
+
 - What the user asked for (goals)
 - Concrete approaches being considered (options)
 - Choices made between approaches (decisions)
@@ -394,12 +427,12 @@ deciduous doc gc                # Remove orphaned files from disk
 
 **When to suggest document attachment:**
 
-| Situation | Action |
-|-----------|--------|
-| User shares an image or screenshot | Ask: "Want me to attach this to the current goal/action node?" |
-| User references an external document | Ask: "Should I attach a copy to the decision graph?" |
-| Architecture diagram is discussed | Suggest attaching it to the relevant goal node |
-| Files not in the project are dropped in | Attach to the most relevant active node |
+| Situation                               | Action                                                         |
+| --------------------------------------- | -------------------------------------------------------------- |
+| User shares an image or screenshot      | Ask: "Want me to attach this to the current goal/action node?" |
+| User references an external document    | Ask: "Should I attach a copy to the decision graph?"           |
+| Architecture diagram is discussed       | Suggest attaching it to the relevant goal node                 |
+| Files not in the project are dropped in | Attach to the most relevant active node                        |
 
 **Do NOT aggressively prompt for documents.** Only suggest when files are directly relevant to a decision node. Files are stored in `.deciduous/documents/` with content-hash naming for deduplication.
 
@@ -408,12 +441,14 @@ deciduous doc gc                # Remove orphaned files from disk
 **Prompts must be the EXACT user message, not a summary.** When a user request triggers new work, capture their full message word-for-word.
 
 **BAD - summaries are useless for context recovery:**
+
 ```bash
 # DON'T DO THIS - this is a summary, not a prompt
 deciduous add goal "Add auth" -p "User asked: add login to the app"
 ```
 
 **GOOD - verbatim prompts enable full context recovery:**
+
 ```bash
 # Use --prompt-stdin for multi-line prompts
 deciduous add goal "Add auth" -c 90 --prompt-stdin << 'EOF'
@@ -429,11 +464,13 @@ EOF
 ```
 
 **When to capture prompts:**
+
 - Root `goal` nodes: YES - the FULL original request
 - Major direction changes: YES - when user redirects the work
 - Routine downstream nodes: NO - they inherit context via edges
 
 **Updating prompts on existing nodes:**
+
 ```bash
 deciduous prompt <node_id> "full verbatim prompt here"
 cat prompt.txt | deciduous prompt <node_id>  # Multi-line from stdin
@@ -445,14 +482,14 @@ Prompts are viewable in the web viewer.
 
 **The graph's value is in its CONNECTIONS, not just nodes.**
 
-| When you create... | IMMEDIATELY link to... |
-|-------------------|------------------------|
-| `outcome` | The action that produced it |
-| `action` | The decision that spawned it |
-| `decision` | The option(s) it chose between |
-| `option` | Its parent goal |
-| `observation` | Related goal/action |
-| `revisit` | The decision/outcome being reconsidered |
+| When you create... | IMMEDIATELY link to...                  |
+| ------------------ | --------------------------------------- |
+| `outcome`          | The action that produced it             |
+| `action`           | The decision that spawned it            |
+| `decision`         | The option(s) it chose between          |
+| `option`           | Its parent goal                         |
+| `observation`      | Related goal/action                     |
+| `revisit`          | The decision/outcome being reconsidered |
 
 **Root `goal` nodes are the ONLY valid orphans.**
 
@@ -502,6 +539,7 @@ deciduous sync
 ```
 
 To deploy to GitHub Pages:
+
 1. `deciduous sync` to export
 2. Push to GitHub
 3. Settings > Pages > Deploy from branch > /docs folder
@@ -511,6 +549,7 @@ Your graph will be live at `https://<user>.github.io/<repo>/`
 ### Branch-Based Grouping
 
 Nodes are auto-tagged with the current git branch. Configure in `.deciduous/config.toml`:
+
 ```toml
 [branch]
 main_branches = ["main", "master"]
@@ -526,17 +565,20 @@ auto_detect = true
 ### Git Staging Rules - CRITICAL
 
 **NEVER use broad git add commands that stage everything:**
+
 - ❌ `git add -A` - stages ALL changes including untracked files
 - ❌ `git add .` - stages everything in current directory
 - ❌ `git add -a` or `git commit -am` - auto-stages all tracked changes
 - ❌ `git add *` - glob patterns can catch unintended files
 
 **ALWAYS stage files explicitly by name:**
+
 - ✅ `git add src/main.rs src/lib.rs`
 - ✅ `git add Cargo.toml Cargo.lock`
 - ✅ `git add .claude/commands/decision.md`
 
 **Why this matters:**
+
 - Prevents accidentally committing sensitive files (.env, credentials)
 - Prevents committing large binaries or build artifacts
 - Forces you to review exactly what you're committing
@@ -569,4 +611,5 @@ deciduous events checkpoint --clear-events
 ```
 
 Events auto-emit on add/link/status commands. Git merges event files automatically.
+
 <!-- deciduous:end -->

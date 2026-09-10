@@ -44,17 +44,17 @@ The app should work for any atproto account, including accounts on self-hosted P
 
 ## Terms
 
-| Term | Meaning |
-| --- | --- |
-| Owner | The signed-in account whose follows are being reviewed. |
-| Subject | A followed account under review. |
-| Follow record | An `app.bsky.graph.follow` record in the owner's repo. One subject can have more than one. |
-| Decision | `keep` or `unfollow`, set by the user. `unfollowed` is set by the app after a run deletes the subject's follow records. |
-| Skip | Moves a subject to the end of the queue without deciding. Session-only by design. |
-| Lookback | How many days of activity to load per subject. Default 180. |
-| Gap threshold | The minimum length of an inactive stretch worth flagging. Default 30 days. |
-| Covered window | The period the loaded activity fully accounts for. See "Activity metrics." |
-| Run | One execution of unfollows, recorded with its targets and outcome. |
+| Term           | Meaning                                                                                                                 |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Owner          | The signed-in account whose follows are being reviewed.                                                                 |
+| Subject        | A followed account under review.                                                                                        |
+| Follow record  | An `app.bsky.graph.follow` record in the owner's repo. One subject can have more than one.                              |
+| Decision       | `keep` or `unfollow`, set by the user. `unfollowed` is set by the app after a run deletes the subject's follow records. |
+| Skip           | Moves a subject to the end of the queue without deciding. Session-only by design.                                       |
+| Lookback       | How many days of activity to load per subject. Default 180.                                                             |
+| Gap threshold  | The minimum length of an inactive stretch worth flagging. Default 30 days.                                              |
+| Covered window | The period the loaded activity fully accounts for. See "Activity metrics."                                              |
+| Run            | One execution of unfollows, recorded with its targets and outcome.                                                      |
 
 ## User stories
 
@@ -63,12 +63,14 @@ Each story's acceptance criteria are its test list.
 ### Sign in
 
 AUTH-1. The user signs in with their handle through atproto OAuth.
+
 - Entering a handle starts the OAuth flow against the authorization server for that account's PDS, including self-hosted ones.
 - The consent screen shows only the permission to create and delete follow records.
 - After sign-in, the app knows the owner's DID and PDS from the session and never asks for the handle again on that browser.
 - A denied or failed authorization returns to the sign-in screen with the error reason shown.
 
 AUTH-2. The session persists until it expires or the user signs out.
+
 - Reloading the page restores the session without a redirect.
 - When the session can't be refreshed, the user is sent back through OAuth. The triage position and all decisions are unchanged afterward.
 - Signing out revokes the session with the authorization server and clears tokens. Decisions stay unless the user deletes them separately (STORE-4).
@@ -76,12 +78,14 @@ AUTH-2. The session persists until it expires or the user signs out.
 ### Loading follows
 
 LOAD-1. After sign-in, the app loads every account the owner follows.
+
 - Follows are read from the owner's repo, not the AppView's follow list. Deleted, deactivated, and suspended accounts are included.
 - Profiles are loaded in batches of 25 and follow-back status in batches of 30.
 - Progress text states the current step and counts.
 - Accounts followed or unfollowed in another client since the last load are added or removed on the next load.
 
 LOAD-2. Activity loads for every subject in the background while the user reviews.
+
 - At most 4 subjects load at once.
 - Activity is cached for 24 hours per subject and lookback value. A reload within that time makes no activity requests.
 - One subject failing to load does not stop the others. The failure appears on that subject with the error message.
@@ -90,6 +94,7 @@ LOAD-2. Activity loads for every subject in the background while the user review
 ### Account view
 
 VIEW-1. The triage screen shows one subject with:
+
 - Avatar, display name, handle linked to the Bluesky profile, and bio with line breaks kept.
 - Whether the subject follows the owner.
 - Follower, following, and post counts, and the date the owner first followed them.
@@ -104,16 +109,19 @@ VIEW-3. If a subject's PDS can't be read, the view says likes couldn't be loaded
 ### Triage
 
 TRI-1. The user decides with the keyboard or buttons.
+
 - Keys: `K` keep, `U` unfollow, `S` skip, `Z` undo. Keys are ignored while focus is in a text field or a modifier key is held.
 - The decision is written to storage before the next subject appears. If the write fails, the subject stays on screen and the error is shown.
 
 TRI-2. The queue shows the least recently active undecided subjects first.
+
 - Unavailable subjects and subjects whose activity failed to load come before all others.
 - A subject with no activity in the covered window sorts before any subject with activity.
 - The subject on screen never changes because of background loading.
 - While activity is still loading, "next" is chosen from what has loaded, and the header says the order will settle once loading finishes.
 
 TRI-3. Undo reverses the last decision or skip and returns to that subject.
+
 - The undo stack persists across reloads.
 - Subjects whose follow records were already deleted by a run are removed from the undo stack.
 
@@ -126,6 +134,7 @@ TRI-5. The header shows how many subjects are undecided, kept, and marked for un
 STORE-1. Decisions, the undo stack, settings, and run records persist in IndexedDB, keyed by owner DID.
 
 STORE-2. The app requests persistent storage from the browser and shows the result in settings.
+
 - If persistence is denied, settings shows a plain explanation of what that means and links to export.
 
 STORE-3. Two tabs can't run the app for the same owner at once. A second tab shows a notice with an option to take over, which ends the session in the first tab.
@@ -137,14 +146,17 @@ STORE-4. Settings has a way to delete all stored data for the owner, with a conf
 RUN-1. The review screen lists every subject marked for unfollow with avatar, name, handle, and last-active time. Each can be switched to keep.
 
 RUN-2. Starting a run creates a run record before any delete request.
+
 - The record stores each target's DID, handle, display name, and follow record rkeys, read fresh from the owner's repo at run start.
 - Targets with no follow record left are marked `unfollowed` without a request, since they were unfollowed elsewhere.
 
 RUN-3. Deletes are sent with `com.atproto.repo.applyWrites` in batches of up to 100.
+
 - After each batch, the run record and the affected decisions are updated before the next batch is sent.
 - Progress shows follow records removed out of the total.
 
 RUN-4. An interrupted run can resume. Causes include a closed tab, a network failure, or an expired session.
+
 - On next load, an unfinished run is offered for resumption.
 - Resuming re-reads the owner's repo and only deletes records that still exist.
 
@@ -153,6 +165,7 @@ RUN-5. The user can download the target list of any run as JSON.
 ### Restore
 
 RESTORE-1. The runs screen lists past runs with date and target count. From a run, the user can re-follow all targets or chosen ones.
+
 - Re-following creates a new follow record per subject.
 - The screen states that re-followed accounts will be notified and that the original follow date is not recovered.
 - Re-followed subjects get the decision `keep`.
@@ -162,6 +175,7 @@ RESTORE-1. The runs screen lists past runs with date and target count. From a ru
 BACKUP-1. The user can export decisions, settings, the undo stack, and run records to a versioned JSON file. The activity cache is not exported.
 
 BACKUP-2. The user can import that file into the same owner account.
+
 - A file for a different owner DID is rejected, and the error names both DIDs.
 - When both sides have a decision for the same subject, the one with the later `decidedAt` wins.
 - The import reports what it added, updated, and skipped.
@@ -174,12 +188,12 @@ These definitions are the contract for `activity-stats`. They are unit tested in
 
 Each subject's posts, replies, reposts, and likes are merged into one timeline of events, each with a kind and a timestamp.
 
-| Kind | Source | Timestamp |
-| --- | --- | --- |
-| Post | Author feed item without a reply reference or repost reason | Earlier of the record's `createdAt` and the AppView's `indexedAt` |
-| Reply | Author feed item whose record has a reply reference | Same as post |
-| Repost | Author feed item with a repost reason | The repost reason's `indexedAt` |
-| Like | `app.bsky.feed.like` record in the subject's repo | The record's `createdAt` |
+| Kind   | Source                                                      | Timestamp                                                         |
+| ------ | ----------------------------------------------------------- | ----------------------------------------------------------------- |
+| Post   | Author feed item without a reply reference or repost reason | Earlier of the record's `createdAt` and the AppView's `indexedAt` |
+| Reply  | Author feed item whose record has a reply reference         | Same as post                                                      |
+| Repost | Author feed item with a repost reason                       | The repost reason's `indexedAt`                                   |
+| Like   | `app.bsky.feed.like` record in the subject's repo           | The record's `createdAt`                                          |
 
 Posts use the earlier of the two timestamps, which is how the AppView orders author feeds. Backdated imports keep their claimed date, and future-dated posts can't sort ahead of real ones. Like records whose `createdAt` doesn't parse are dropped, since they can't be placed in time.
 
@@ -194,13 +208,13 @@ Only events inside the covered window count toward any metric. Without this, a s
 
 ### Metrics
 
-| Metric | Definition |
-| --- | --- |
-| Last active | The latest event time. Null if the window has no events. |
-| Typical gap | Median of the times between consecutive events, shown with the mean. The median leads because one long absence skews the mean. Needs at least 2 events. |
-| Long gaps | Every stretch without events that is at least the gap threshold. This includes the stretch from the last event to load time, marked ongoing. When the window is not truncated, it also includes the stretch from the window start to the first event. That stretch is marked "at least" if the window starts at the lookback boundary. If it starts at account creation, it is exact. |
-| Latest long gap | The most recent long gap. |
-| Counts | Events per kind inside the covered window. |
+| Metric          | Definition                                                                                                                                                                                                                                                                                                                                                                            |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Last active     | The latest event time. Null if the window has no events.                                                                                                                                                                                                                                                                                                                              |
+| Typical gap     | Median of the times between consecutive events, shown with the mean. The median leads because one long absence skews the mean. Needs at least 2 events.                                                                                                                                                                                                                               |
+| Long gaps       | Every stretch without events that is at least the gap threshold. This includes the stretch from the last event to load time, marked ongoing. When the window is not truncated, it also includes the stretch from the window start to the first event. That stretch is marked "at least" if the window starts at the lookback boundary. If it starts at account creation, it is exact. |
+| Latest long gap | The most recent long gap.                                                                                                                                                                                                                                                                                                                                                             |
+| Counts          | Events per kind inside the covered window.                                                                                                                                                                                                                                                                                                                                            |
 
 Changing the gap threshold recomputes metrics from cached events without refetching. Changing the lookback invalidates the cache.
 
@@ -212,21 +226,21 @@ The strip spans the full lookback. It has one row per kind with a tick per event
 
 All reads are public and unauthenticated. The AppView is `https://public.api.bsky.app`.
 
-| Data | Endpoint | Host |
-| --- | --- | --- |
-| Owner's follow records and rkeys | `com.atproto.repo.listRecords` on `app.bsky.graph.follow` | Owner's PDS |
-| Profiles | `app.bsky.actor.getProfiles`, 25 per request | AppView |
-| Follows the owner | `app.bsky.graph.getRelationships`, 30 per request | AppView |
-| Posts, replies, reposts | `app.bsky.feed.getAuthorFeed` with `filter=posts_with_replies` | AppView |
-| Subject's PDS | DID document from `plc.directory`, or `/.well-known/did.json` for `did:web` | PLC or subject's domain |
-| Likes | `com.atproto.repo.listRecords` on `app.bsky.feed.like` | Subject's PDS |
-| Liked post content | `app.bsky.feed.getPosts`, fetched when the subject is displayed | AppView |
+| Data                             | Endpoint                                                                    | Host                    |
+| -------------------------------- | --------------------------------------------------------------------------- | ----------------------- |
+| Owner's follow records and rkeys | `com.atproto.repo.listRecords` on `app.bsky.graph.follow`                   | Owner's PDS             |
+| Profiles                         | `app.bsky.actor.getProfiles`, 25 per request                                | AppView                 |
+| Follows the owner                | `app.bsky.graph.getRelationships`, 30 per request                           | AppView                 |
+| Posts, replies, reposts          | `app.bsky.feed.getAuthorFeed` with `filter=posts_with_replies`              | AppView                 |
+| Subject's PDS                    | DID document from `plc.directory`, or `/.well-known/did.json` for `did:web` | PLC or subject's domain |
+| Likes                            | `com.atproto.repo.listRecords` on `app.bsky.feed.like`                      | Subject's PDS           |
+| Liked post content               | `app.bsky.feed.getPosts`, fetched when the subject is displayed             | AppView                 |
 
 Authenticated writes go through the OAuth session to the owner's PDS:
 
-| Action | Endpoint |
-| --- | --- |
-| Unfollow | `com.atproto.repo.applyWrites` with delete operations on `app.bsky.graph.follow` |
+| Action    | Endpoint                                                                         |
+| --------- | -------------------------------------------------------------------------------- |
+| Unfollow  | `com.atproto.repo.applyWrites` with delete operations on `app.bsky.graph.follow` |
 | Re-follow | `com.atproto.repo.applyWrites` with create operations on `app.bsky.graph.follow` |
 
 ## Authentication
@@ -286,14 +300,14 @@ Alternatives considered:
 
 Database name `follow-triage`. Keys that include the owner DID keep data for multiple accounts separate.
 
-| Store | Key | Value |
-| --- | --- | --- |
-| `settings` | `ownerDid` | lookbackDays, thresholdDays |
-| `decisions` | `[ownerDid, subjectDid]` | decision, decidedAt |
-| `undo` | `ownerDid` | ordered list of subject DIDs |
-| `follows` | `[ownerDid, subjectDid]` | profile snapshot, follow rkeys, first followed date, follows-owner flag, loadedAt |
-| `activity` | `subjectDid` | events, recent entries, covered window, lookbackDays, fetchedAt, likes error if any |
-| `runs` | `id` | ownerDid, kind (`unfollow` or `refollow`), createdAt, status, targets with rkeys, completed rkeys, error |
+| Store       | Key                      | Value                                                                                                    |
+| ----------- | ------------------------ | -------------------------------------------------------------------------------------------------------- |
+| `settings`  | `ownerDid`               | lookbackDays, thresholdDays                                                                              |
+| `decisions` | `[ownerDid, subjectDid]` | decision, decidedAt                                                                                      |
+| `undo`      | `ownerDid`               | ordered list of subject DIDs                                                                             |
+| `follows`   | `[ownerDid, subjectDid]` | profile snapshot, follow rkeys, first followed date, follows-owner flag, loadedAt                        |
+| `activity`  | `subjectDid`             | events, recent entries, covered window, lookbackDays, fetchedAt, likes error if any                      |
+| `runs`      | `id`                     | ownerDid, kind (`unfollow` or `refollow`), createdAt, status, targets with rkeys, completed rkeys, error |
 
 `runs` has an index on `ownerDid`. Activity is not keyed by owner because it describes the subject, and sharing it between owners on one browser is harmless.
 
@@ -357,20 +371,20 @@ Copy uses sentence case and names actions by what they do: "Unfollow 42 accounts
 
 ## Edge cases
 
-| Case | Behavior |
-| --- | --- |
-| Duplicate follow records for one subject | All rkeys are deleted in a run. The first followed date is the earliest record. |
-| Follow record with unparseable `createdAt` | Followed date is hidden. The record is still deleted in runs. |
-| Subject changed handle since last load | Profiles reload each session, and runs store the handle at run time. |
-| Subject deleted between load and run | Still unfollowed, since the follow record is in the owner's repo. |
-| Subject unfollowed in another client before a run | Marked `unfollowed` at run start with no request. |
-| New follow added in another client | Appears after the next load as undecided. |
-| Stored decision for a subject no longer followed | Kept in storage but excluded from counts and queue. Removed by "delete all data." |
-| `did:web` subject whose domain is down | Likes error on that subject. Posts still load from the AppView. |
-| Subject's PDS lacks CORS headers | Same as above. |
-| Session expires mid-run | Run pauses as interrupted. After re-authorization it resumes (RUN-4). |
-| Owner's authorization server rejects the scope | Sign-in shows the server's error and the requested scope. No broader scope is requested automatically. |
-| Very large follow count (5,000+) | The first load takes several minutes. Triage starts as soon as the first subjects load. |
+| Case                                              | Behavior                                                                                               |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Duplicate follow records for one subject          | All rkeys are deleted in a run. The first followed date is the earliest record.                        |
+| Follow record with unparseable `createdAt`        | Followed date is hidden. The record is still deleted in runs.                                          |
+| Subject changed handle since last load            | Profiles reload each session, and runs store the handle at run time.                                   |
+| Subject deleted between load and run              | Still unfollowed, since the follow record is in the owner's repo.                                      |
+| Subject unfollowed in another client before a run | Marked `unfollowed` at run start with no request.                                                      |
+| New follow added in another client                | Appears after the next load as undecided.                                                              |
+| Stored decision for a subject no longer followed  | Kept in storage but excluded from counts and queue. Removed by "delete all data."                      |
+| `did:web` subject whose domain is down            | Likes error on that subject. Posts still load from the AppView.                                        |
+| Subject's PDS lacks CORS headers                  | Same as above.                                                                                         |
+| Session expires mid-run                           | Run pauses as interrupted. After re-authorization it resumes (RUN-4).                                  |
+| Owner's authorization server rejects the scope    | Sign-in shows the server's error and the requested scope. No broader scope is requested automatically. |
+| Very large follow count (5,000+)                  | The first load takes several minutes. Triage starts as soon as the first subjects load.                |
 
 ## Performance and limits
 
