@@ -14,6 +14,11 @@ Decisions are stored in the browser so a review of a few thousand accounts can s
 
 A working prototype exists (see "Prototype findings"). This document defines the version to build on suede for long-term maintenance.
 
+**What is built today is v0, which deviates from this document on purpose.** It
+signs in with an app password instead of atproto OAuth, and it runs locally
+with no deployment. See "Version 0" below before implementing anything in
+"Authentication" or "Architecture on suede".
+
 ## Problem
 
 Follow lists drift. People stop posting, change what they post about, or move on, and the list keeps growing. Bluesky shows who you follow as a flat list with no activity context. Judging one account means opening the profile, scrolling, and guessing how active it is. Likes, which are most of some people's activity, aren't visible on other people's profiles at all.
@@ -245,6 +250,9 @@ Authenticated writes go through the OAuth session to the owner's PDS:
 
 ## Authentication
 
+> **Not yet built.** v0 uses app passwords; see "Version 0". Everything in this
+> section describes v1 and remains the plan.
+
 ### Decision: public browser OAuth client
 
 Use `@atproto/oauth-client-browser` as a public client that runs entirely in the browser.
@@ -400,6 +408,57 @@ Copy uses sentence case and names actions by what they do: "Unfollow 42 accounts
 - Tokens are DPoP-bound and managed by the OAuth library. App code never handles credentials.
 - The deployed app sends a Content Security Policy. `connect-src` must allow any HTTPS origin, because subjects' PDSes are arbitrary hosts.
 - Decisions and runs never leave the browser except through a user-initiated export.
+
+## Version 0: local build
+
+v0 exists to get the triage loop in front of a real follow list quickly. It is
+a stage of this product, not a separate one — the storage schema, the metric
+definitions, and the user stories are unchanged.
+
+### What differs from the rest of this document
+
+| Area                    | v1 as specified                                       | v0 as built                                                             |
+| ----------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------- |
+| Authentication          | atproto OAuth, scoped to follow records               | App password, via `com.atproto.server.createSession`                    |
+| Credential lifetime     | DPoP-bound tokens held by the OAuth library           | Session tokens in `sessionStorage`, gone when the tab closes            |
+| Deployment              | Cloudflare, serving static assets and client metadata | None; `pnpm dev` on the developer's machine                             |
+| Content-Security-Policy | Sent as a response header                             | Not sent; there is no server to send it                                 |
+| PDS routing             | Handled by OAuth                                      | Bluesky-hosted accounts must authenticate at the `bsky.social` entryway |
+
+### What v0 costs
+
+**An app password grants full account access.** It can read direct messages,
+post, and delete anything in the repo. The OAuth scope planned for v1 grants
+only the creation and deletion of follow records, and that narrowness is a
+large part of why this app is defensible at all — it asks to delete follows and
+can honestly say it can do nothing else.
+
+Nothing in v0 uses more than follow access. But the credential permits it, so:
+
+- v0 is for the author's own account on the author's own machine.
+- v0 is not deployed, and deploying it would be a decision to hand strangers a
+  full-access credential prompt.
+- The app password is used once at sign-in and never stored. Only the returned
+  session tokens are kept, and only for the life of the tab.
+
+**The bsky.social entryway special case returns.** A Bluesky-hosted account's
+DID document names a PDS like `shiitake.us-east.host.bsky.network`, but those
+hosts do not authenticate anyone — `createSession` has to go to
+`https://bsky.social`. Sending credentials to the PDS host fails in a way that
+reads as a wrong password. OAuth removes this distinction, which is one of the
+reasons v1 moves to it. Implemented in `pdsForLogin` and unit tested.
+
+### Leaving v0
+
+v1 is reached by replacing the authentication module and restoring the
+deployment. Specifically: `src/lib/atproto/session.ts` gives way to an OAuth
+client and the `oauth-client-metadata.json` route returns; the Cloudflare
+adapter and the Content-Security-Policy return with it; and the entryway
+special case in `pdsForLogin` is deleted rather than carried forward.
+
+Nothing else is expected to change. The storage schema is already the version 1
+schema in this document, including the stores v0 does not write yet, so v1 adds
+rows rather than a migration.
 
 ## Release slices
 

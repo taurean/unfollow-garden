@@ -20,8 +20,9 @@ disagree about product behaviour, the PRD wins.
 
 **Two constraints shape everything:** no user data reaches a server, and every
 unfollow is an individual decision. There is no server-side storage, no
-rule-based bulk action, and no analytics. The Cloudflare deployment serves
-static assets and OAuth client metadata, nothing else.
+rule-based bulk action, and no analytics. v0 runs locally with no server at
+all; when a deployment returns it serves static assets and OAuth client
+metadata, nothing else.
 
 This project was forked from [suede](https://github.com/taurean/suede) at
 `2026.7.3.3`; `package.json#suede.from` records the lineage. The process
@@ -29,14 +30,17 @@ pipeline below is suede's, tailored during kickoff.
 
 ## Stack
 
-SvelteKit · Cloudflare Pages + Workers · Vitest + Playwright · pnpm ·
-stylebase + Bits UI · Storybook.
+SvelteKit · Vitest + Playwright · pnpm · stylebase + Bits UI · Storybook.
 
-The app is client-rendered: routes set `ssr = false`, and the only
-server-generated output is `oauth-client-metadata.json`. D1 and Drizzle were
-ripped during kickoff — persistence is IndexedDB in the browser, per the PRD's
-no-server-storage constraint. Adding a database back is a decision to
-re-litigate that constraint, not a wiring change.
+The app is client-rendered and, in v0, entirely local: `ssr = false`, a static
+build, and no server of any kind. D1 and Drizzle were ripped during kickoff and
+Cloudflare followed in v0 — persistence is IndexedDB in the browser, per the
+PRD's no-server-storage constraint. Adding a database or a backend is a decision
+to re-litigate that constraint, not a wiring change.
+
+**v0 authenticates with an app password**, which grants full account access.
+That is a deliberate, temporary trade recorded in `PRD.md`, "Version 0" and
+`CONTEXT.md`. It is the reason v0 is not deployed.
 
 ## Git workflow
 
@@ -287,11 +291,14 @@ Never:
 - Edit markup or styles in a way the authoring boundaries forbid.
 - Skip the PR description.
 - Commit secrets.
-- Broaden the OAuth scope. It is
+- Deploy v0, or widen what it can do with the app-password session. The
+  credential already grants full account access; the app must keep using it
+  only for follows. When OAuth lands, the scope is
   `atproto repo:app.bsky.graph.follow?action=create&action=delete` and nothing
-  else. `transition:generic` grants full account write access and is never a
-  fallback for an authorization server that rejects granular scopes — that
-  failure is shown to the user, not worked around.
+  else — `transition:generic` is never a fallback for an authorization server
+  that rejects granular scopes.
+- Store the app password. It is used once at sign-in and never written
+  anywhere.
 - Store user data on a server, or add analytics, telemetry, or a third-party
   script. Both are PRD non-goals, not preferences.
 - Send an authenticated read. Every account lookup uses public endpoints; the

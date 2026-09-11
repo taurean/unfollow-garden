@@ -4,59 +4,57 @@ Non-obvious constraints and gotchas specific to this project. Things a
 reasonable person would get wrong on first contact, and the reason each one is
 the way it is. `PRD.md` owns product behaviour; this file owns the traps.
 
-## Open the dev server at `127.0.0.1`, never `localhost`
+## This is v0, and it is not the app the PRD describes
 
-`pnpm dev` binds to `127.0.0.1` (set in `vite.config.ts`). You must also _open_
-the app there.
+v0 signs in with an **app password** and runs **only on your machine**. The
+PRD's Authentication and Architecture sections describe v1 and are not what is
+built. `PRD.md`, "Version 0" is the reconciliation; read it before implementing
+anything from those sections.
 
-In development the app authenticates as an atproto **loopback** OAuth client,
-whose `client_id` embeds a `redirect_uri` on `http://127.0.0.1:<port>`. An
-authorization server treats `127.0.0.1` and `localhost` as different origins
-even though they resolve to the same machine, so opening the app at `localhost`
-produces a redirect-URI mismatch. The failure surfaces as an authorization
-error from a server you don't control, which reads like a scope or metadata
-problem rather than a hostname one.
+## An app password is a full-access credential
 
-## The OAuth scope string exists in exactly one place
+`com.atproto.server.createSession` with an app password returns a token that can
+read direct messages, post, and delete anything in the repo. This app uses none
+of that — but the credential permits it, which is why:
 
-`src/lib/atproto/client-config.ts` exports `OAUTH_SCOPE`. Both the metadata
-document at `/oauth-client-metadata.json` and the `BrowserOAuthClient` read it
-from there.
+- v0 is for your own account on your own machine, and is not deployed.
+- The app password is used once at sign-in and never stored.
+- Session tokens go in `sessionStorage`, not `localStorage`, so they die with
+  the tab. Decisions live in IndexedDB and survive, so closing the tab costs a
+  sign-in and nothing more.
 
-They must agree. The authorization server compares the scope it was asked for
-against the scope in the metadata it fetched, and if the two drift the failure
-names neither file. Two string literals that "obviously" match is how that drift
-starts.
+The narrow OAuth scope in v1 is what makes this app defensible to anyone who is
+not its author. Until then, treat the deployment question as closed.
 
-The scope is
-`atproto repo:app.bsky.graph.follow?action=create&action=delete` and nothing
-more. `transition:generic` grants full account write access; it is never a
-fallback when an authorization server rejects granular scopes. That failure is
-shown to the user (PRD, "Risks").
+## Bluesky accounts do not log in at their own PDS
 
-## `client_id` is a URL, and it is the app's public identity
+A Bluesky-hosted account's DID document names a PDS like
+`shiitake.us-east.host.bsky.network`. Those hosts store the repo but
+authenticate nobody — `createSession` has to go to `https://bsky.social`, which
+issues tokens the PDS then accepts.
 
-The metadata route derives `client_id` and `redirect_uris` from the live request
-origin, so no hostname is baked into the build. Two consequences:
+Send credentials to the PDS host instead and it fails as an authentication
+error, which reads exactly like a mistyped app password. Self-hosted PDSes
+authenticate for themselves and are used as-is.
 
-- The route **cannot be prerendered**. It has to know the origin it is being
-  served from.
-- The production origin appears on the consent screen, at the moment a user
-  grants permission to delete their follow records. Choosing it is a
-  user-facing decision, not a deployment detail. (PRD open question 3.)
+`pdsForLogin` in `src/lib/atproto/identity.ts` is the whole of it, and it is
+unit tested. OAuth removes the distinction, so this function is deleted rather
+than carried forward when v1 lands.
 
-## `connect-src` cannot be an allowlist
+## There is no Content-Security-Policy right now
 
-Subjects' PDSes are arbitrary hosts, discovered at runtime from DID documents.
-The CSP in `svelte.config.js` therefore allows `https:` broadly on `connect-src`
-and `img-src`. That is deliberate and load-bearing — narrowing it to known
-Bluesky hosts silently breaks every self-hosted account. Every other directive
-is kept tight to compensate.
+The CSP was a response header, and a static local build has no server to send
+one. It returns with the deployment.
+
+When it does: `connect-src` cannot be an allowlist. Subjects' PDSes are
+arbitrary hosts discovered at runtime from DID documents, so it has to allow
+`https:` broadly, with every other directive kept tight to compensate.
+Narrowing it to known Bluesky hosts silently breaks every self-hosted account.
 
 ## There is no server, and adding one is a product decision
 
-D1 and Drizzle were removed at kickoff. Persistence is IndexedDB in the browser;
-the Cloudflare deployment serves static assets plus the one metadata route.
+D1 and Drizzle were removed at kickoff, and Cloudflare went with them in v0.
+Persistence is IndexedDB in the browser; `pnpm build` produces static files.
 
 This is not a stack preference that can be revisited for convenience. "No user
 data on a server" is PRD goal 4 and the reason the app can be honest about what
@@ -65,7 +63,9 @@ a sync backend, or an analytics call each re-open that decision.
 
 Note that the `atprotocol-oauth` global skill's guide includes a server-side
 HMAC session-cookie step. **Skip it.** That step exists for apps that keep auth
-state on a server; this one does not.
+state on a server; this one does not. The rest of that skill applies when v1
+lands. The rest of that skill applies when v1
+lands.
 
 ## Svelte proxies cannot be structured-cloned
 
@@ -85,10 +85,17 @@ widen the scope the app has to request, for no gain.
 
 Recorded so nobody assumes these were settled and moved on:
 
-- **The production origin.** Blocking for slice 1; see `client_id` above.
+- **The production origin.** Not blocking while v0 is local-only, but it
+  blocks the v1 deploy: `client_id` is a URL authorization servers fetch, and it
+  appears on the consent screen. (PRD open question 3.)
 - **The favicon.** `src/lib/assets/favicon.svg` is still the stock Svelte logo.
   Replacing it is a visual-contract decision, which the authoring boundaries
   make human-owned.
-- **`.env.example`.** May still list the three `CLOUDFLARE_*` D1 credentials
-  that `drizzle.config.ts` read before it was deleted. The file is outside what
-  the agent may read, so a human has to clear it.
+- **`.env.example`.** Still lists the three `CLOUDFLARE_*` D1 credentials that
+  `drizzle.config.ts` read before it was deleted. v0 needs no environment
+  variables at all. The file is outside what the agent may read, so a human has
+  to clear it.
+
+- **Queue ordering.** v0 shows unavailable accounts first, then oldest follows
+  first. The PRD orders by inactivity (TRI-2), which needs the activity loading
+  that arrives in slice 2.
