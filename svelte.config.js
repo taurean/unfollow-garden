@@ -1,4 +1,4 @@
-import adapter from '@sveltejs/adapter-cloudflare';
+import adapter from '@sveltejs/adapter-static';
 
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
@@ -7,28 +7,15 @@ const config = {
 		runes: ({ filename }) => (filename.split(/[/\\]/).includes('node_modules') ? undefined : true)
 	},
 	kit: {
-		adapter: adapter(),
-
-		// Subjects' PDSes are arbitrary hosts discovered at runtime from DID
-		// documents, so connect-src cannot be an allowlist — `https:` is the
-		// narrowest form that still lets the app read a self-hosted PDS. Every
-		// other directive stays tight to compensate.
-		csp: {
-			mode: 'auto',
-			directives: {
-				'default-src': ['self'],
-				'connect-src': ['self', 'https:'],
-				// Avatars and post embeds come from the same arbitrary hosts.
-				'img-src': ['self', 'data:', 'https:'],
-				// Svelte emits scoped styles as inline <style> blocks.
-				'style-src': ['self', 'unsafe-inline'],
-				'font-src': ['self', 'data:'],
-				'base-uri': ['self'],
-				'form-action': ['self'],
-				'frame-ancestors': ['none'],
-				'object-src': ['none']
-			}
-		}
+		// v0 runs locally and ships nothing. The whole app is client-rendered
+		// already (`ssr = false`), so a static build with an SPA fallback is the
+		// honest shape: `pnpm build` produces files a browser can open, with no
+		// server in the request path at all.
+		//
+		// The Content-Security-Policy that lived here went with the Cloudflare
+		// adapter. It was a response header, which a static build cannot send —
+		// it comes back with the deploy. See CONTEXT.md.
+		adapter: adapter({ fallback: 'index.html', strict: false })
 	}
 };
 
