@@ -48,6 +48,29 @@ export type Phase =
 	| 'settings';
 
 /**
+ * The most recent thing the user did to a subject, so it can be named and taken
+ * back.
+ *
+ * Held as one field rather than derived from the decision stack because a skip
+ * is not on that stack — it is session-only by design — and "undo the last
+ * thing I did" has to mean the same thing whichever of the two it was.
+ */
+export interface LastAction {
+	kind: 'keep' | 'unfollow' | 'skip';
+	subjectDid: string;
+	/** How to name the account in the notice: display name, else handle. */
+	label: string;
+	/**
+	 * Distinguishes one action from the next.
+	 *
+	 * Two identical decisions in a row produce identical records, and the
+	 * notice has to restart its timer for the second one rather than quietly
+	 * carrying on counting down from the first.
+	 */
+	seq: number;
+}
+
+/**
  * Tokens are the library's problem, not this file's.
  *
  * v0 kept app-password tokens in `sessionStorage` so a full-access credential
@@ -150,6 +173,14 @@ export class TriageSession {
 	 * screen calls `advance`.
 	 */
 	current = $state<FollowSnapshot | null>(null);
+
+	/**
+	 * What the last keep, unfollow, or skip was — the backing for the undo
+	 * notice. Null once the notice is dismissed or the action is taken back.
+	 */
+	lastAction = $state<LastAction | null>(null);
+
+	private actionSeq = 0;
 
 	undecided = $derived(this.subjects.filter((s) => !this.decisions.has(s.subjectDid)));
 	remaining = $derived(this.undecided.filter((s) => !this.skipped.has(s.subjectDid)));
@@ -254,6 +285,7 @@ export class TriageSession {
 		this.decisions.clear();
 		this.skipped.clear();
 		this.current = null;
+		this.lastAction = null;
 		this.error = null;
 		this.phase = 'signed-out';
 
@@ -397,7 +429,25 @@ export class TriageSession {
 		const subject = this.current;
 		if (!subject) return;
 		this.skipped.add(subject.subjectDid);
+		this.noteAction('skip', subject);
 		this.advance();
+	}
+
+	/** Name what just happened, so the undo notice can report and reverse it. */
+	private noteAction(kind: LastAction['kind'], subject: FollowSnapshot): void {
+		this.lastAction = {
+			kind,
+			subjectDid: subject.subjectDid,
+			label:
+				subject.profile?.displayName?.trim() ||
+				(subject.profile?.handle ? `@${subject.profile.handle}` : 'this account'),
+			seq: ++this.actionSeq
+		};
+	}
+
+	/** Stop offering to take the last action back, without taking it back. */
+	dismissLastAction(): void {
+		this.lastAction = null;
 	}
 
 	/** Put the skipped subjects back in the queue. */
@@ -455,6 +505,7 @@ export class TriageSession {
 		await deleteOwnerData(session.did);
 		this.decisions.clear();
 		this.skipped.clear();
+		this.lastAction = null;
 		this.pastRuns = [];
 		this.runs.unfinished = null;
 		this.settings = { ownerDid: session.did, ...DEFAULT_SETTINGS };
@@ -540,6 +591,7 @@ export class TriageSession {
 			const record = await saveDecision(session.did, subject.subjectDid, decision);
 			this.decisions.set(subject.subjectDid, record);
 			this.error = null;
+			this.noteAction(decision, subject);
 
 			// Asked once, after the first decision: before that there is nothing
 			// to lose, and a permission prompt with nothing behind it is noise.
@@ -553,8 +605,29 @@ export class TriageSession {
 		}
 	}
 
-	/** Take back the last decision and return to that subject. */
+	/**
+	 * Take back the last thing the user did, whatever kind it was.
+	 *
+	 * A skip is not on the undo stack — it is session-only by design (PRD,
+	 * "Terms") — so popping the stack after one would take back the decision
+	 * *before* it and silently return the wrong account. Dispatching on what
+	 * actually happened last is the only way "undo" means one thing.
+	 */
 	async undo(): Promise<void> {
+		if (this.lastAction?.kind === 'skip') {
+			const { subjectDid } = this.lastAction;
+			this.skipped.delete(subjectDid);
+			this.lastAction = null;
+			this.current = this.subjects.find((s) => s.subjectDid === subjectDid) ?? this.current;
+			this.phase = 'triage';
+			return;
+		}
+
+		await this.undoDecision();
+	}
+
+	/** Take back the last decision and return to that subject. */
+	private async undoDecision(): Promise<void> {
 		const session = this.session;
 		if (!session) return;
 
@@ -563,6 +636,7 @@ export class TriageSession {
 
 		this.decisions.delete(subjectDid);
 		this.skipped.delete(subjectDid);
+		this.lastAction = null;
 
 		this.current = this.subjects.find((s) => s.subjectDid === subjectDid) ?? this.current;
 		this.phase = 'triage';
