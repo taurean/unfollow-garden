@@ -73,3 +73,14 @@
 <Story name="Closed" asChild>
 	<Toast open={false} ondismiss={fn()}>Nothing to report</Toast>
 </Story>
+
+<!--
+	A deleted, deactivated or suspended account has no profile to name, and the
+	notice says so rather than naming nothing (PRD, VIEW-2). The follow record
+	is still real, so the decision still means something.
+-->
+<Story name="Account that could not be loaded" asChild>
+	<Toast open tone="unfollow" action="Undo" onaction={fn()} ondismiss={fn()} duration={600000}>
+		Marked an account that could not be loaded for unfollow
+	</Toast>
+</Story>
