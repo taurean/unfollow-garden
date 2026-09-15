@@ -109,6 +109,15 @@ export class TriageSession {
 	/** What the last import did, so the user is told rather than left guessing. */
 	importReport = $state<ImportReport | null>(null);
 
+	/**
+	 * Why follow-back status is missing, when it is.
+	 *
+	 * Separate from `error` because it does not stop anything: the review still
+	 * works, it is just missing one signal. Held so the screen can say "unknown"
+	 * instead of letting a blank read as "no".
+	 */
+	followBackError = $state<string | null>(null);
+
 	/** The phase to return to when settings closes. */
 	private phaseBeforeSettings: Phase = 'triage';
 
@@ -304,18 +313,28 @@ export class TriageSession {
 					loaded: 0,
 					total: subjectDids.length
 				};
-				// Follow-back status is a nice-to-have on the card, not a reason
-				// to fail a load that already has every profile.
-				const followsOwner = await getFollowsOwner(session.did, subjectDids, (loaded) => {
-					this.progress = {
-						step: 'Checking who follows you back',
-						loaded,
-						total: subjectDids.length
-					};
-					// An empty result is passed straight to saveFollows and never
-					// held in reactive state.
-					// eslint-disable-next-line svelte/prefer-svelte-reactivity
-				}).catch(() => new Map<string, boolean>());
+				/*
+				 * Follow-back status is a nice-to-have on the card, not a reason to
+				 * fail a load that already has every profile — but the failure is
+				 * recorded rather than swallowed. Without the note, a rejected
+				 * lookup just means no card ever shows "follows you", and absence
+				 * reads as "they do not follow you back", which is a different
+				 * claim and one the reader would act on.
+				 */
+				// eslint-disable-next-line svelte/prefer-svelte-reactivity
+				let followsOwner = new Map<string, boolean>();
+				try {
+					followsOwner = await getFollowsOwner(session.did, subjectDids, (loaded) => {
+						this.progress = {
+							step: 'Checking who follows you back',
+							loaded,
+							total: subjectDids.length
+						};
+					});
+					this.followBackError = null;
+				} catch (cause) {
+					this.followBackError = cause instanceof Error ? cause.message : String(cause);
+				}
 
 				subjects = await saveFollows(session.did, follows, profiles, followsOwner);
 			}

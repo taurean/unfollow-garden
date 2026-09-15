@@ -84,6 +84,12 @@
 		<p class="error u:fs-1" role="alert">{session.error}</p>
 	{/if}
 
+	{#if session.followBackError}
+		<p class="caveat u:fs-0">
+			Whether these accounts follow you back could not be loaded, so no card shows it either way. ({session.followBackError})
+		</p>
+	{/if}
+
 	{#if session.current}
 		{#key session.current.subjectDid}
 			<AccountCard
@@ -166,6 +172,13 @@
 			margin: 0;
 			font-family: var(--ff-ui);
 			color: var(--danger-ink);
+		}
+
+		.caveat {
+			margin: 0;
+			font-family: var(--ff-ui);
+			color: var(--warn-ink);
+			max-inline-size: 70ch;
 		}
 
 		.actions {

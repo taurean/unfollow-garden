@@ -506,13 +506,18 @@ Confirmed against the live network since:
   open for older self-hosted PDSes.
 - The loopback `client_id` form is accepted for local development, so no
   hostname is needed to work on this.
+- **The whole loop runs against a real account.** Sign-in completes, follows
+  and activity load, and a run deletes follow records. Exercised by the author
+  on their own account.
 
 Still not confirmed against the live network:
 
 - `app.bsky.graph.getRelationships` works without auth on the public AppView.
 - `com.atproto.repo.listRecords` returns newest first by default on current PDS versions.
-- CORS behavior of third-party PDSes in practice.
-- A completed sign-in, and a run that actually deletes follow records.
+- CORS behavior of third-party PDSes in practice, beyond the accounts the
+  author happens to follow.
+- Behaviour at the scale the performance section assumes: several thousand
+  follows, and the rate limits a first scan of that size would meet.
 
 OAuth removes one prototype assumption entirely: routing app-password sessions for `*.host.bsky.network` accounts through the bsky.social entryway.
 
