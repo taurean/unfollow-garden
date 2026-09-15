@@ -1,7 +1,7 @@
 {
 	"name": "unfollow-garden",
 	"private": true,
-	"version": "2026.9.15.3",
+	"version": "2026.9.15.4",
 	"description": "Review every Bluesky account you follow, one at a time, and unfollow the ones you are done with.",
 	"type": "module",
 	"suede": {
