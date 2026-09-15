@@ -1,0 +1,13 @@
+# Package Managers
+pnpm-lock.yaml
+yarn.lock
+bun.lock
+bun.lockb
+
+# Miscellaneous
+/static/
+
+# Generated and maintained by `deciduous update` — reformatting them here just
+# produces a diff the next update reverts (CLAUDE.md, "Layout").
+/.claude/commands/
+/.claude/hooks/

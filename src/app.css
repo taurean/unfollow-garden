@@ -1,0 +1,48 @@
+@import '@taurean/stylebase';
+@import './lib/styles/tokens.css';
+
+@layer default {
+	html,
+	body {
+		background-color: var(--surface);
+	}
+
+	body {
+		color: var(--ink);
+		/*
+		 * One typeface, chosen for legibility at small sizes (PRD,
+		 * "Interface"). A transitional serif holds up in the recent-post
+		 * columns, where the text is dense and small, better than the UI sans
+		 * stylebase defaults to.
+		 */
+		font-family: var(--ff-transitional);
+	}
+
+	/* Figures that sit in columns have to line up to be comparable. */
+	.tabular {
+		font-variant-numeric: tabular-nums;
+	}
+}
+
+@layer layout {
+	:focus-visible {
+		outline: 2px solid var(--strip-active);
+		outline-offset: 2px;
+		border-radius: 2px;
+	}
+
+	/*
+	 * The strip animates nothing, but the screen swaps a whole subject on every
+	 * keystroke. Anyone who has asked for less motion gets none.
+	 */
+	@media (prefers-reduced-motion: reduce) {
+		*,
+		*::before,
+		*::after {
+			animation-duration: 0.01ms !important;
+			animation-iteration-count: 1 !important;
+			transition-duration: 0.01ms !important;
+			scroll-behavior: auto !important;
+		}
+	}
+}

@@ -1,0 +1,60 @@
+node_modules
+
+# Output
+.output
+.vercel
+.netlify
+/.svelte-kit
+/build
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.*
+!.env.example
+!.env.test
+
+# Vite
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# Storybook
+*storybook.log
+storybook-static
+
+# Deciduous database (local, per-machine). The sync/ event log is the shared
+# record in multi-user setups (.claude/skills/ decision-graph docs, "Sync") and
+# is the one thing under .deciduous/ that gets committed.
+#
+# Note the shape: git cannot re-include a file inside a fully-ignored
+# directory, so this has to ignore the *contents* (`.deciduous/*`) rather than
+# the directory (`.deciduous/`). A blanket rule here silently cancels the
+# negation below, which is what used to happen.
+.deciduous/*
+!.deciduous/sync/
+
+# Deciduous exported web viewer (regenerated per machine via `deciduous sync`)
+docs/
+
+# Per-task scratch space (blog post drafts, planning notes, anything
+# the agent wants to write without committing). The compiled form
+# (graph nodes + PR description) is what persists. Handoff is the
+# tool for resuming work across machines.
+agent-notes/
+
+# Per-task working context (slice-briefs, kickoff follow-up notes). The
+# draft PR body carries the durable copy; the worktree copy dies with the
+# worktree.
+tmp/
+
+# CLAUDE.md and .claude/ are tracked. Suede ignored them so that AGENTS.md
+# could be the one harness-neutral instruction file; this project dropped
+# AGENTS.md and the .pi/ layer at kickoff and standardized on Claude, so the
+# rulebook and the in-repo skills are project files like any other.
+#
+# The exception is settings.local.json, which is per-person permission
+# grants rather than project policy — settings.json is the shared one.
+.claude/settings.local.json
