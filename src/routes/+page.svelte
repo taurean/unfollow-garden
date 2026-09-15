@@ -64,7 +64,7 @@
 		{:else if session.phase === 'settings'}
 			<SettingsScreen {session} />
 		{:else}
-			<section class="done">
+			<section class="[ done ] [ l:stage ]">
 				<h1 class="u:fs-5">
 					{session.skippedCount > 0 ? 'Only skipped accounts left' : 'Every account reviewed'}
 				</h1>
@@ -96,9 +96,8 @@
 			flex-direction: column;
 			align-items: flex-start;
 			gap: var(--space-sm);
-			max-inline-size: 44rem;
-			margin-inline: auto;
-			padding: var(--space-4xl) var(--space-lg) var(--space-3xl) var(--space-2xl);
+			--stage-width: 44rem;
+			--stage-leading: var(--space-4xl);
 		}
 
 		h1,
@@ -122,13 +121,24 @@
 			padding: var(--space-sm) var(--space-lg) var(--space-sm) var(--space-2xl);
 		}
 
+		.interrupted :global(.button) {
+			min-block-size: var(--tap-min);
+		}
+
 		/* Pinned opposite the wordmark, out of the reading column entirely. */
 		.utility {
 			position: fixed;
 			top: 0;
 			right: 0;
-			z-index: 1;
+			/*
+			 * Above the wordmark tab, not level with it. On a phone the two
+			 * share one band and these links sit over its right end, so the
+			 * order between them has to be stated rather than left to source
+			 * order across two components.
+			 */
+			z-index: var(--layer-bar);
 			display: flex;
+			align-items: center;
 			gap: var(--space-lg);
 			padding: var(--space-sm) var(--space-lg);
 		}
@@ -144,6 +154,33 @@
 		.utility :global(.button[data-variant='link']:hover) {
 			color: var(--ink);
 			text-decoration: underline;
+		}
+
+		/* phone — see the breakpoint note in src/lib/styles/tokens.css */
+		@media (max-width: 40rem) {
+			/*
+			 * Clearance for the fixed band, declared once for the whole page
+			 * rather than by each screen. Every screen would otherwise have to
+			 * know the band exists, and the one that forgot would put its
+			 * first line underneath it.
+			 */
+			main {
+				padding-block-start: var(--top-band);
+			}
+
+			/* The right-hand end of the wordmark's band, so it inherits its ink. */
+			.utility {
+				block-size: var(--top-band);
+				padding-block: 0;
+			}
+
+			.utility :global(.button[data-variant='link']) {
+				color: var(--chip-ink);
+			}
+
+			.interrupted {
+				padding-inline: var(--space-lg);
+			}
 		}
 
 		.interrupted p {

@@ -123,11 +123,35 @@
 			max-inline-size: 70ch;
 		}
 
-		@media (max-width: 50rem) {
+		/*
+		 * wide — the same boundary the card's header folds at, deliberately.
+		 * These are one layout: the figures stop being a row at the width the
+		 * identity above them stops being one. See the breakpoint note in
+		 * src/lib/styles/tokens.css.
+		 */
+		@media (max-width: 60rem) {
 			.totals {
 				align-items: flex-start;
 				text-align: start;
 				margin-inline-start: 0;
+			}
+		}
+
+		/* phone */
+		@media (max-width: 40rem) {
+			/*
+			 * Two columns rather than a wrapping row. Four figures wrapping
+			 * freely put three on one line and one orphaned below, and the
+			 * orphan read as more important than the three.
+			 */
+			.summary {
+				display: grid;
+				grid-template-columns: 1fr 1fr;
+				gap: var(--space-lg);
+			}
+
+			.totals {
+				grid-column: 1 / -1;
 			}
 		}
 	}

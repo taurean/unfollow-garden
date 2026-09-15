@@ -26,7 +26,7 @@
 			position: fixed;
 			top: 0;
 			left: 0;
-			z-index: 1;
+			z-index: var(--layer-tab);
 
 			writing-mode: vertical-rl;
 			padding: var(--space-lg) var(--space-2xs);
@@ -40,13 +40,25 @@
 			color: var(--chip-ink);
 		}
 
-		/* On a phone the edge tab would eat a gutter the content cannot spare. */
+		/*
+		 * On a phone the edge tab would eat a gutter the content cannot spare,
+		 * so it lies down into a band across the top.
+		 *
+		 * The band stays *fixed* rather than going static: the utility links
+		 * opposite it are fixed too, and a static band would scroll out from
+		 * under them and leave them floating over the card. Both keep the same
+		 * block padding so they read as one bar.
+		 *
+		 * phone — see the breakpoint note in src/lib/styles/tokens.css
+		 */
 		@media (max-width: 40rem) {
 			.wordmark {
-				position: static;
 				writing-mode: horizontal-tb;
-				display: block;
-				padding: var(--space-2xs) var(--space-lg);
+				display: flex;
+				align-items: center;
+				inset-inline: 0;
+				block-size: var(--top-band);
+				padding: 0 var(--space-lg);
 			}
 		}
 	}

@@ -24,7 +24,7 @@
 	);
 </script>
 
-<section class="run">
+<section class="[ run ] [ l:stage ]">
 	{#if controller.busy}
 		<h1 class="u:fs-5">Unfollowing…</h1>
 		<p class="count u:fs-3 tabular" role="status" aria-live="polite">
@@ -67,9 +67,8 @@
 			flex-direction: column;
 			align-items: flex-start;
 			gap: var(--space-sm);
-			max-inline-size: 44rem;
-			margin-inline: auto;
-			padding: var(--space-4xl) var(--space-lg) var(--space-3xl) var(--space-2xl);
+			--stage-width: 44rem;
+			--stage-leading: var(--space-4xl);
 		}
 
 		h1,
@@ -98,6 +97,7 @@
 		}
 
 		.actions :global(.button[data-variant='quiet']) {
+			min-block-size: var(--tap-min);
 			background-color: transparent;
 			color: var(--ink-quiet);
 			border: 1px solid var(--hue-z0-divider);

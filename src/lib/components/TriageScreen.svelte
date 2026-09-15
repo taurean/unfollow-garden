@@ -1,8 +1,11 @@
 <script lang="ts">
 	import AccountCard from '$lib/components/AccountCard.svelte';
 	import RecentColumns from '$lib/components/RecentColumns.svelte';
+	import SwipeCard from '$lib/components/SwipeCard.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
+	import Toast from '$lib/components/ui/Toast.svelte';
 	import { exact } from '$lib/format';
+	import type { SwipeOutcome } from '$lib/triage/swipe';
 	import type { TriageSession } from '$lib/triage/session.svelte';
 
 	let { session }: { session: TriageSession } = $props();
@@ -14,6 +17,32 @@
 	);
 
 	const recent = $derived(activity.activity?.recent ?? []);
+
+	/** How the last action reads in the notice. */
+	const TOAST_VERB: Record<SwipeOutcome, string> = {
+		keep: 'Keeping',
+		unfollow: 'Marked',
+		skip: 'Skipped'
+	};
+
+	/** Whether the account still has to be told what happens next. */
+	const TOAST_TAIL: Record<SwipeOutcome, string> = {
+		keep: '',
+		unfollow: ' for unfollow',
+		skip: ' for later'
+	};
+
+	/**
+	 * A swipe and a button press are the same decision.
+	 *
+	 * Routing both through one function is what keeps them that way: the
+	 * gesture is an input method, not a second code path with its own rules
+	 * about what keeping means.
+	 */
+	function commit(outcome: SwipeOutcome) {
+		if (outcome === 'skip') session.skip();
+		else session.decide(outcome);
+	}
 
 	/**
 	 * Keyboard triage.
@@ -30,15 +59,15 @@
 		switch (event.key.toLowerCase()) {
 			case 'k':
 				event.preventDefault();
-				session.decide('keep');
+				commit('keep');
 				break;
 			case 'u':
 				event.preventDefault();
-				session.decide('unfollow');
+				commit('unfollow');
 				break;
 			case 's':
 				event.preventDefault();
-				session.skip();
+				commit('skip');
 				break;
 			case 'z':
 				event.preventDefault();
@@ -50,7 +79,7 @@
 
 <svelte:window onkeydown={onKeydown} />
 
-<section class="stage">
+<section class="[ stage ] [ l:stage ]">
 	<header class="status u:fs-0 tabular">
 		<p>
 			<strong>{exact(session.remaining.length)}</strong> to review
@@ -92,30 +121,56 @@
 
 	{#if session.current}
 		{#key session.current.subjectDid}
-			<AccountCard
-				subject={session.current}
-				{activity}
-				lookbackDays={session.settings.lookbackDays}
-				thresholdDays={session.settings.thresholdDays}
-			/>
+			<SwipeCard oncommit={commit}>
+				<AccountCard
+					subject={session.current}
+					{activity}
+					lookbackDays={session.settings.lookbackDays}
+					thresholdDays={session.settings.thresholdDays}
+				/>
+			</SwipeCard>
 		{/key}
 
+		<!--
+			The bar sticks to the bottom of the viewport on a phone and sits in
+			the flow on a wider screen. On a phone the card is taller than the
+			screen, so a bar in the flow means scrolling past the whole account
+			to act on it — several hundred times.
+		-->
 		<div class="actions">
-			<Button data-variant="keep" onclick={() => session.decide('keep')}>
-				Keep <kbd>K</kbd>
-			</Button>
-			<Button data-variant="unfollow" onclick={() => session.decide('unfollow')}>
-				Unfollow <kbd>U</kbd>
-			</Button>
+			<div class="decisions">
+				<Button data-variant="keep" onclick={() => commit('keep')}>
+					Keep <kbd>K</kbd>
+				</Button>
+				<Button data-variant="unfollow" onclick={() => commit('unfollow')}>
+					Unfollow <kbd>U</kbd>
+				</Button>
+			</div>
 
 			<div class="quiet-actions">
-				<Button data-variant="quiet" onclick={() => session.skip()}>Skip <kbd>S</kbd></Button>
+				<Button data-variant="quiet" onclick={() => commit('skip')}>Skip <kbd>S</kbd></Button>
 				<Button data-variant="quiet" onclick={() => session.undo()}>Undo <kbd>Z</kbd></Button>
 			</div>
 
 			<p class="scope u:fs-0">
-				checking data from the last {session.settings.lookbackDays} days<br />
-				marking changes nothing yet — unfollows happen in a run
+				<!--
+					The lookback is already stated on the card itself, next to
+					the figures it governs, so the phone bar drops this half
+					rather than spending a line of thumb space repeating it.
+					The reassurance below has no second home and always shows.
+				-->
+				<span class="lookback"
+					>checking data from the last {session.settings.lookbackDays} days<br /></span
+				>marking changes nothing yet — unfollows happen in a run
+			</p>
+
+			<!--
+				Shown only where a gesture is possible at all. On a desktop with
+				no touch screen it would be advice about a control that is not
+				there.
+			-->
+			<p class="hint u:fs-0" aria-hidden="true">
+				swipe right to keep · left to unfollow · down to skip
 			</p>
 		</div>
 	{/if}
@@ -127,17 +182,28 @@
 	</section>
 {/if}
 
+<Toast
+	open={session.lastAction !== null}
+	key={session.lastAction?.seq}
+	tone={session.lastAction?.kind ?? 'neutral'}
+	action="Undo"
+	offset="var(--pinned-bar)"
+	onaction={() => session.undo()}
+	ondismiss={() => session.dismissLastAction()}
+>
+	{TOAST_VERB[session.lastAction?.kind ?? 'keep']}
+	{session.lastAction?.label}{TOAST_TAIL[session.lastAction?.kind ?? 'keep']}
+</Toast>
+
 <style>
 	@layer layout {
+		/* Width, centring and the wordmark gutter come from `l:stage`. */
 		.stage {
 			display: flex;
 			flex-direction: column;
 			gap: var(--space-xl);
-			max-inline-size: var(--stage-max);
-			margin-inline: auto;
-			padding: var(--space-xl) var(--space-lg) var(--space-2xl);
-			/* Room for the fixed wordmark tab on the viewport's left edge. */
-			padding-inline-start: var(--space-2xl);
+			--stage-leading: var(--space-xl);
+			--stage-trailing: var(--space-2xl);
 		}
 
 		.status {
@@ -188,6 +254,11 @@
 			gap: var(--space-sm);
 		}
 
+		.decisions {
+			display: flex;
+			gap: var(--space-sm);
+		}
+
 		/* Skip and undo are set apart from the two decisions, not lined up with
 		   them: they are ways out, not a third and fourth choice. */
 		.quiet-actions {
@@ -204,6 +275,20 @@
 			color: var(--ink-quiet);
 		}
 
+		/* A pointer that cannot swipe gets no advice about swiping. */
+		.hint {
+			display: none;
+			margin: 0;
+			font-family: var(--ff-ui);
+			color: var(--ink-quiet);
+		}
+
+		@media (pointer: coarse) {
+			.hint {
+				display: block;
+			}
+		}
+
 		/*
 		 * The recent columns sit on their own surface below the fold. Everything
 		 * needed to decide is above it; this is for when that was not enough.
@@ -217,6 +302,10 @@
 		.recent :global(.columns) {
 			max-inline-size: var(--stage-max);
 			margin-inline: auto;
+		}
+
+		.actions :global(.button) {
+			min-block-size: var(--tap-min);
 		}
 
 		.actions :global(.button[data-variant='keep']) {
@@ -251,13 +340,64 @@
 			opacity: 0.7;
 		}
 
+		/* phone — see the breakpoint note in src/lib/styles/tokens.css */
 		@media (max-width: 40rem) {
+			.stage {
+				gap: var(--space-lg);
+				--stage-leading: var(--space-lg);
+				/*
+				 * Clearance for the bar now pinned over the bottom of the page,
+				 * so the last of the card is still reachable by scrolling.
+				 */
+				--stage-trailing: calc(var(--pinned-bar) + var(--space-2xl));
+			}
+
+			/*
+			 * Pinned within thumb reach. The card above it is taller than the
+			 * screen, and a bar in the flow would mean scrolling the whole
+			 * account past to reach the two buttons — every single time.
+			 */
+			.actions {
+				position: fixed;
+				z-index: var(--layer-bar);
+				inset-block-end: 0;
+				inset-inline: 0;
+				flex-direction: column;
+				align-items: stretch;
+				gap: var(--space-2xs);
+				padding: var(--space-sm) var(--space-lg);
+				padding-block-end: calc(var(--space-sm) + env(safe-area-inset-bottom, 0px));
+				background-color: var(--surface-raised);
+				border-block-start: 1px solid var(--hue-z0-divider);
+			}
+
+			/* Two equal halves: neither decision is the default. */
+			.decisions {
+				display: grid;
+				grid-template-columns: 1fr 1fr;
+			}
+
 			.quiet-actions {
+				display: grid;
+				grid-template-columns: 1fr 1fr;
 				margin-inline-start: 0;
 			}
+
 			.scope {
 				margin-inline-start: 0;
-				text-align: start;
+				text-align: center;
+			}
+
+			.lookback {
+				display: none;
+			}
+
+			.hint {
+				text-align: center;
+			}
+
+			.recent {
+				padding: var(--space-2xl) var(--space-lg);
 			}
 		}
 	}

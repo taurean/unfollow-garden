@@ -4,7 +4,7 @@
 	let { progress }: { progress: Progress } = $props();
 </script>
 
-<section class="loading">
+<section class="[ loading ] [ l:stage ]">
 	<p class="step u:fs-3">{progress.step || 'Getting ready'}</p>
 	<p class="count u:fs-2">
 		{#if progress.total !== null}
@@ -24,9 +24,8 @@
 			display: flex;
 			flex-direction: column;
 			gap: var(--space-2xs);
-			max-inline-size: 32rem;
-			margin-inline: auto;
-			padding: var(--space-4xl) var(--space-lg) var(--space-3xl) var(--space-2xl);
+			--stage-width: 32rem;
+			--stage-leading: var(--space-4xl);
 		}
 
 		.step {

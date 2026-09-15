@@ -70,7 +70,7 @@
 	const ghost = $derived(service ? `you.${service.domain}` : 'you.example.social');
 </script>
 
-<section class="sign-in">
+<section class="[ sign-in ] [ l:stage ]">
 	<!-- The product is `unfollow.garden`; `unfollow-garden` is only the repo. -->
 	<h1 class="u:fs-6">unfollow.garden</h1>
 	<p class="lede u:fs-2 u:lh-standard">
@@ -146,9 +146,8 @@
 			display: flex;
 			flex-direction: column;
 			gap: var(--space-lg);
-			max-inline-size: 32rem;
-			margin-inline: auto;
-			padding: var(--space-4xl) var(--space-lg) var(--space-3xl) var(--space-2xl);
+			--stage-width: 32rem;
+			--stage-leading: var(--space-4xl);
 		}
 
 		h1 {
@@ -184,14 +183,23 @@
 		input,
 		.ghost {
 			font-family: var(--ff-ui);
-			font-size: var(--fs-2);
+			/*
+			 * 16px or larger, always.
+			 *
+			 * iOS Safari zooms the whole page in when a focused input's text
+			 * is under 16px, and it does not zoom back out on blur. `--fs-2`
+			 * tops out at about 18.75px but *starts* at 14.4px, which is
+			 * exactly the small-screen end where the zoom would fire.
+			 */
+			font-size: max(1rem, var(--fs-2));
 			/* The ghost sits inside the border box, so it clears the 1px border. */
-			padding: var(--space-2xs) calc(var(--space-xs) + 1px);
+			padding: var(--space-sm) calc(var(--space-xs) + 1px);
 		}
 
 		input {
+			min-block-size: var(--tap-min);
 			border: 1px solid var(--hue-z0-divider);
-			border-radius: 0.25rem;
+			border-radius: var(--radius-md);
 			background: transparent;
 			color: inherit;
 		}
@@ -237,8 +245,17 @@
 
 		/* The submit button needs room from the fields it commits. */
 		form :global(.button) {
+			min-block-size: var(--tap-min);
 			margin-block-start: var(--space-lg);
 			align-self: flex-start;
+		}
+
+		/* phone — see the breakpoint note in src/lib/styles/tokens.css */
+		@media (max-width: 40rem) {
+			/* Full width, because it is the only thing to do on this screen. */
+			form :global(.button) {
+				align-self: stretch;
+			}
 		}
 	}
 </style>

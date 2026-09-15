@@ -52,7 +52,19 @@
 <div class="strip">
 	<div class="months" aria-hidden="true">
 		{#each months as month (month.offset)}
-			<span class="month" style="left: {month.offset * 100}%">{month.label}</span>
+			<!--
+				A label near the end is anchored by its right edge instead of its
+				left. `monthTicks` can place one within a few days of the window's
+				end, and left-anchored it runs past the track and is clipped to a
+				fragment — "Septem" — which is worse than either a shifted label
+				or none at all. The most recent month is also the one most worth
+				keeping, so it is nudged rather than dropped.
+			-->
+			{#if month.offset > 0.9}
+				<span class="month" style="right: {(1 - month.offset) * 100}%">{month.label}</span>
+			{:else}
+				<span class="month" style="left: {month.offset * 100}%">{month.label}</span>
+			{/if}
 		{/each}
 	</div>
 
@@ -124,7 +136,7 @@
 
 		.bucket {
 			background-color: var(--strip-empty);
-			border-radius: 1px;
+			border-radius: var(--radius-sm);
 		}
 
 		.bucket[data-state='active'] {
