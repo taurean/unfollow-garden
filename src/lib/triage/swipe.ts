@@ -200,15 +200,19 @@ export interface SwipeOptions {
 	/** Called when a released gesture did not clear it, so the card springs back. */
 	oncancel: () => void;
 	/** Whether the gesture is available at all — false while a card is leaving. */
-	enabled?: boolean;
+	enabled: boolean;
 	/**
 	 * Whether a downward drag may mean skip.
 	 *
 	 * Read at the moment the pointer goes down rather than continuously: the
 	 * page cannot scroll mid-gesture anyway, and sampling once means the
 	 * gesture cannot change meaning underneath the finger.
+	 *
+	 * Required rather than defaulted, because "is the page at the top?" is not
+	 * a question this module can answer and not one it should quietly guess an
+	 * answer to. There is one caller and it knows.
 	 */
-	isDownArmed?: () => boolean;
+	isDownArmed: () => boolean;
 }
 
 /**
@@ -237,7 +241,7 @@ export function swipe(node: HTMLElement, options: SwipeOptions) {
 	}
 
 	function onpointerdown(event: PointerEvent) {
-		if (current.enabled === false) return;
+		if (!current.enabled) return;
 		// Secondary buttons and right-clicks are not gestures.
 		if (event.pointerType === 'mouse' && event.button !== 0) return;
 		// A drag that starts on a link or a control belongs to that control.
@@ -249,7 +253,7 @@ export function swipe(node: HTMLElement, options: SwipeOptions) {
 		startX = event.clientX;
 		startY = event.clientY;
 		axis = 'none';
-		downArmed = current.isDownArmed ? current.isDownArmed() : false;
+		downArmed = current.isDownArmed();
 		current.onmove({ ...IDLE, dragging: true, width: node.getBoundingClientRect().width });
 	}
 
@@ -298,6 +302,15 @@ export function swipe(node: HTMLElement, options: SwipeOptions) {
 		const wasAxis = axis;
 		axis = 'none';
 
+		/*
+		 * A gesture that never locked an axis cannot resolve to one now.
+		 *
+		 * This is not a restatement of `resolve`. A quick flick can deliver
+		 * `pointerdown` and `pointerup` with no `pointermove` between them, so
+		 * `axis` is still `'none'` while the final position is far enough from
+		 * the start that `resolve` alone would happily commit it. That is a tap
+		 * with drift, and it must not decide anything.
+		 */
 		const outcome = wasAxis === 'none' ? null : resolve(locked);
 		if (outcome) current.oncommit(outcome);
 		else current.oncancel();

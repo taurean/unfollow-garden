@@ -438,9 +438,15 @@ export class TriageSession {
 		this.lastAction = {
 			kind,
 			subjectDid: subject.subjectDid,
-			label:
-				subject.profile?.displayName?.trim() ||
-				(subject.profile?.handle ? `@${subject.profile.handle}` : 'this account'),
+			/*
+			 * A display name is optional and may be blank; a handle is not —
+			 * `Profile.handle` is a required string. So the only real absence
+			 * here is having no profile at all, which is a deleted, deactivated
+			 * or suspended account the user still follows (PRD, VIEW-2).
+			 */
+			label: subject.profile
+				? subject.profile.displayName?.trim() || `@${subject.profile.handle}`
+				: 'an account that could not be loaded',
 			seq: ++this.actionSeq
 		};
 	}

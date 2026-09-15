@@ -52,7 +52,6 @@
 		 * aside" without joining the two decisions as a rival to them.
 		 */
 		--skip: var(--hue-slate-600);
-		--skip-hover: var(--hue-slate-700);
 
 		--danger-ink: var(--hue-red-700);
 		--warn-ink: var(--hue-amber-700);
@@ -173,7 +172,6 @@
 
 			/* Skip is ink-on-ground, so it does follow the theme. */
 			--skip: var(--hue-slate-500);
-			--skip-hover: var(--hue-slate-400);
 		}
 	}
 }

@@ -41,6 +41,25 @@
 	let leavingWidth = $state(0);
 
 	/**
+	 * Whether the viewer asked for less motion.
+	 *
+	 * Read here rather than answered in CSS, because the transform is an inline
+	 * style and a stylesheet can only beat an inline style with `!important`.
+	 * Keeping the decision in the one place that writes the transform means the
+	 * prohibition does not need an exception. Same `matchMedia` shape as
+	 * `SignIn.svelte`, which already had this problem.
+	 */
+	let reducedMotion = $state(false);
+
+	$effect(() => {
+		const query = window.matchMedia('(prefers-reduced-motion: reduce)');
+		const apply = () => (reducedMotion = query.matches);
+		apply();
+		query.addEventListener('change', apply);
+		return () => query.removeEventListener('change', apply);
+	});
+
+	/**
 	 * Whether a downward drag may mean skip, sampled when the finger lands.
 	 *
 	 * Only at the very top of the page: anywhere below it a downward drag is
@@ -51,6 +70,14 @@
 		return window.scrollY <= 1;
 	}
 
+	/*
+	 * A card that is already leaving takes no further input.
+	 *
+	 * `[data-leaving] { pointer-events: none }` below is what actually enforces
+	 * this, so these two guards are belt and braces — but they are cheap, and
+	 * they are what stops a second `oncommit` if that rule is ever edited out.
+	 * The failure they prevent is a card deciding twice.
+	 */
 	function onmove(next: SwipeState) {
 		if (leaving) return;
 		drag = next;
@@ -99,10 +126,16 @@
 			: tiltFor(drag.dx, drag.width, drag.progress)
 	);
 
+	/*
+	 * With reduced motion the card never travels: it is gone either way, and
+	 * the difference is only whether it moves to get there.
+	 */
 	const transform = $derived(
-		leaving
-			? `translate3d(${leaving.x}px, ${leaving.y}px, 0) rotate(${tilt}deg)`
-			: `translate3d(${drag.dx}px, ${drag.dy}px, 0) rotate(${tilt}deg)`
+		reducedMotion
+			? 'none'
+			: leaving
+				? `translate3d(${leaving.x}px, ${leaving.y}px, 0) rotate(${tilt}deg)`
+				: `translate3d(${drag.dx}px, ${drag.dy}px, 0) rotate(${tilt}deg)`
 	);
 
 	const LABEL: Record<SwipeOutcome, string> = {
@@ -212,8 +245,15 @@
 		}
 
 		/*
-		 * Anchored to the side the card is travelling toward, so the label and
-		 * the movement agree. Skip has no side, so it sits in the middle.
+		 * Anchored to the side the card is travelling *away from* — the space
+		 * it vacates.
+		 *
+		 * This layer does not move with the card; it fills the container the
+		 * card slides around inside. So a card thrown right uncovers the left,
+		 * and the label belongs in the gap that opens rather than under the
+		 * card's leading edge, where it would be the part still covered.
+		 * Skip vacates the top, but a centred label reads better there than one
+		 * pinned to a corner.
 		 */
 		.intent[data-outcome='keep'] {
 			justify-content: flex-start;
@@ -276,19 +316,10 @@
 		}
 
 		/*
-		 * Anyone who asked for less motion gets the outcome without the
-		 * flight. The card is gone either way; the difference is whether it
-		 * travels to get there.
-		 *
-		 * `!important` is load-bearing here and is the one place it is: the
-		 * transform is an inline style, and inline styles lose to nothing
-		 * else in the cascade.
+		 * Reduced motion is handled in the script, not here: the transform is
+		 * an inline style and only `!important` could override it from a
+		 * stylesheet. The global reduced-motion rule in `src/app.css` already
+		 * flattens this transition's duration.
 		 */
-		@media (prefers-reduced-motion: reduce) {
-			.card,
-			.card[data-leaving='true'] {
-				transform: none !important;
-			}
-		}
 	}
 </style>
