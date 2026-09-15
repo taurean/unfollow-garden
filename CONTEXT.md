@@ -287,7 +287,9 @@ every case the component that forgot it had a visible defect:
   flow and pins to the bottom of a phone screen — and `0px` above that
   breakpoint. Both the triage stage's trailing space and the undo notice's
   offset read it. They were two numbers once, and the drift showed up as the
-  notice sitting on top of the buttons it was reporting on.
+  notice sitting on top of the buttons it was reporting on. The bar itself is
+  `TriageActions.svelte`, its own block because it is its own contextual
+  problem: a row in the reading column on a desktop, a pinned bar on a phone.
 
 Media queries cannot read a custom property, so the breakpoints themselves are
 documented in `src/lib/styles/tokens.css` rather than tokenised. There are two:
@@ -304,6 +306,28 @@ a `@container` query instead, because it asks about its own box.
   focused input's text is under 16px and does not zoom back out on blur.
   `--fs-2` tops out around 18.75px but starts at 14.4px — exactly the
   small-screen end where the zoom fires.
+
+## Two traps when testing the timeline strip
+
+Both of these made a regression test for the clipped month label pass against
+the very bug it was written for, and neither announces itself:
+
+- **`.strip` is an inline-size container**, and its own `@container` query
+  hides every second month label below 30rem. At the test runner's default body
+  width the label under test was simply `display: none`, so an assertion that
+  skipped hidden labels skipped the only one that mattered. Set an explicit
+  width before rendering it.
+- **A window ending on the 1st of a month puts that month's tick at the
+  _start_,** not the end. Reproducing an edge-anchored label needs an end date
+  well into the month.
+
+Separately: the component's `window` prop shares a name with one of the testing
+library's own mount options, so its props have to go through an explicit
+`props:` object or the flat form is read as that option and the render throws.
+
+Worth generalising from: a test that passes should be run once against a
+deliberately broken version of the thing it covers. Both new tests on this
+surface were confirmed that way, and one of them needed rewriting because of it.
 
 ## Deliberately unresolved
 
