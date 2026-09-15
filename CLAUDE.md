@@ -30,13 +30,18 @@ pipeline below is suede's, tailored during kickoff.
 
 ## Stack
 
-SvelteKit · Vitest + Playwright · pnpm · stylebase + Bits UI · Storybook.
+SvelteKit · Cloudflare Workers · Vitest + Playwright · pnpm · stylebase + Bits
+UI · Storybook.
 
-The app is client-rendered and, in v0, entirely local: `ssr = false`, a static
-build, and no server of any kind. D1 and Drizzle were ripped during kickoff and
-Cloudflare followed in v0 — persistence is IndexedDB in the browser, per the
-PRD's no-server-storage constraint. Adding a database or a backend is a decision
-to re-litigate that constraint, not a wiring change.
+The app is client-rendered: `ssr = false`, and it deploys to
+`https://unfollow.garden` on **Cloudflare Workers with static assets — always
+Workers, never Pages**. The Worker serves files and headers and has no routes
+of its own.
+
+D1 and Drizzle were ripped at kickoff and persistence is IndexedDB in the
+browser, per the PRD's no-server-storage constraint. Adding a database, a
+backend, or a Worker route that receives user data is a decision to re-litigate
+that constraint, not a wiring change.
 
 **Authentication is atproto OAuth**, as a public browser client, scoped to
 `atproto repo:app.bsky.graph.follow?action=create&action=delete` and nothing

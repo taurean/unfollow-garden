@@ -2,7 +2,7 @@
 
 This file exists so a reader can decide which small part of unfollow-garden is relevant to a task without opening anything else. Areas are divided by reason for change — parts that change for the same reason share an entry, even when they sit in different directories.
 
-The application is feature-complete against `PRD.md`: atproto OAuth sign-in, follow loading, activity loading and metrics, the triage loop, review, unfollow runs with resume, restore, backup, and settings. It is not yet deployed — the only thing standing between here and a deploy is choosing a hostname, since `client_id` is a URL that appears on the consent screen (PRD open question 3). This file describes what exists today.
+The application is feature-complete against `PRD.md`: atproto OAuth sign-in, follow loading, activity loading and metrics, the triage loop, review, unfollow runs with resume, restore, backup, and settings. It deploys to `https://unfollow.garden` on Cloudflare Workers with static assets. The Worker serves files and headers and has no routes of its own, so "no user data on a server" still holds. This file describes what exists today.
 
 ## Layout
 
@@ -14,7 +14,9 @@ unfollow-garden/
 ├── README.md                  # human-facing orientation doc
 ├── SYSTEMS_MAP.md             # this file
 ├── package.json               # scripts + deps; version is the chronver release
-├── svelte.config.js           # SvelteKit config, static adapter
+├── svelte.config.js           # SvelteKit config, Cloudflare adapter, the CSP
+├── wrangler.jsonc             # the Worker: static assets, no routes of its own
+├── _headers                   # response headers; root, not static/
 ├── vite.config.ts             # Vite + the three Vitest projects
 ├── eslint.config.js           # lint policy (ignore list derives from .gitignore)
 ├── src/
@@ -116,11 +118,11 @@ Fragile: `Button`'s styles lean entirely on stylebase custom properties and the 
 
 ### Build and deploy
 
-For: What `pnpm build` produces, and what it does not.
-Lives at: `svelte.config.js`, `package.json`
-Why this shape: v0 ships nothing. Since every route is client-rendered already, the static adapter with an SPA fallback is the honest shape — the output is files a browser can open, with no server in the request path.
-Seams: The adapter line in `svelte.config.js` is the single swap point when a deployment returns.
-Fragile: The Content-Security-Policy went with the Cloudflare adapter, because it was a response header and a static build cannot send one. It has to come back with the deploy, and `CONTEXT.md` records what it must allow — `connect-src` cannot be an allowlist, because subjects' PDSes are arbitrary hosts.
+For: What `pnpm build` produces, where it goes, and what the browser is allowed to do once it gets there.
+Lives at: `svelte.config.js`, `wrangler.jsonc`, `package.json`, `_headers`
+Why this shape: Cloudflare Workers with static assets — always Workers, never Pages. Every route is client-rendered, so the Worker renders nothing; its whole job is handing back files and headers, which is how the Content-Security-Policy returns without the app growing something that could see a decision.
+Seams: `pnpm build:deploy` is the deploy entry point and the single place the production origin is written. `wrangler.jsonc` is where the Worker and its asset behaviour are configured. `kit.csp` is where the policy is defined.
+Fragile: **A route added to this Worker that receives user data re-opens PRD goal 4**, rather than extending it. `_headers` must sit in the project root, not `static/`, or the adapter ignores it with a warning. **The CSP is split in two on purpose** — most of it is SvelteKit-generated into a `<meta>` tag because it must hash the framework's own inline bootstrap script, and `frame-ancestors` is a real header because meta tags ignore it. Hand-writing `script-src 'self'` stops the app booting at all. `connect-src` cannot be an allowlist, because subjects' PDSes are arbitrary hosts. A prerendered `+server.ts` keeps its body and drops its response headers, so the client metadata route's CORS headers are restated in `_headers`. `www` must redirect to the apex or `client_id` will not match. All of it is in `CONTEXT.md`.
 
 ### Verification harness
 
