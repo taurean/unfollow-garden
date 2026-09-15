@@ -3,12 +3,6 @@ import { XrpcError, query } from './xrpc';
 /** The public AppView. Every read in this app goes through it or a PDS. */
 export const APPVIEW = 'https://public.api.bsky.app';
 
-/** Where Bluesky's own PDSes live. See `pdsForLogin` for why this matters. */
-const BSKY_PDS_SUFFIX = '.host.bsky.network';
-
-/** The entryway that fronts every Bluesky-hosted PDS for authentication. */
-const BSKY_ENTRYWAY = 'https://bsky.social';
-
 interface DidDocument {
 	service?: Array<{ id: string; type: string; serviceEndpoint: string }>;
 }
@@ -52,22 +46,4 @@ export async function pdsForDid(did: string): Promise<string> {
 	);
 	if (!pds) throw new XrpcError(0, 'did-document', `${did} has no PDS in its DID document`);
 	return pds.serviceEndpoint.replace(/\/$/, '');
-}
-
-/**
- * Where to send `createSession` for an account, which is not always its PDS.
- *
- * Bluesky-hosted accounts have a PDS like `shiitake.us-east.host.bsky.network`
- * in their DID document, but those hosts do not authenticate anyone — logins go
- * to the `bsky.social` entryway instead, which issues tokens the PDS accepts.
- * Sending credentials straight to the PDS host fails with an authentication
- * error that reads as a wrong password.
- *
- * Self-hosted PDSes authenticate for themselves, so they are used as-is.
- *
- * OAuth removes this distinction entirely, which is one of the reasons v1 moves
- * to it. See CONTEXT.md.
- */
-export function pdsForLogin(pds: string): string {
-	return new URL(pds).host.endsWith(BSKY_PDS_SUFFIX) ? BSKY_ENTRYWAY : pds;
 }

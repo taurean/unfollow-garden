@@ -1,13 +1,14 @@
-import { procedure, XrpcError } from './xrpc';
-import { refreshSession, type Session } from './session';
+import { XrpcError } from './xrpc';
+import type { OwnerSession } from './oauth';
 import { listFollows } from './graph';
 
 /**
  * The only authenticated writes this app makes.
  *
- * Every read in the app is public and unauthenticated; the session exists for
- * this file and nothing else. Keeping the writes in one small module is what
- * makes that claim checkable rather than a promise.
+ * Every read goes through public endpoints; this file is the whole of what the
+ * OAuth grant is for. Keeping it small and in one place is what makes
+ * "it can only add and remove follows" checkable rather than a promise — the
+ * grant permits exactly these two operations on exactly this collection.
  */
 
 const FOLLOW_COLLECTION = 'app.bsky.graph.follow';
@@ -23,34 +24,34 @@ interface ApplyWrite {
 }
 
 /**
- * Send one batch, refreshing the session once if the token has expired.
+ * Send one batch of writes.
  *
- * A scan and a review can easily outlive an access token, so the first write
- * of a run is a likely place to find an expired one. Refreshing here rather
- * than failing the run means a long sitting does not cost the user their
- * progress.
+ * The session's `fetch` signs with DPoP and refreshes an expired token on its
+ * own, so there is no retry-on-401 here — a scan and a review can easily
+ * outlive an access token, and the library is what keeps that from being the
+ * app's problem.
  */
-async function applyWrites(session: Session, writes: ApplyWrite[]): Promise<{ session: Session }> {
-	try {
-		await procedure(
-			session.pds,
-			'com.atproto.repo.applyWrites',
-			{ repo: session.did, writes },
-			session.accessJwt
-		);
-		return { session };
-	} catch (cause) {
-		const expired = cause instanceof XrpcError && (cause.status === 400 || cause.status === 401);
-		if (!expired) throw cause;
+async function applyWrites(session: OwnerSession, writes: ApplyWrite[]): Promise<void> {
+	const endpoint = 'com.atproto.repo.applyWrites';
+	let response: Response;
 
-		const refreshed = await refreshSession(session);
-		await procedure(
-			refreshed.pds,
-			'com.atproto.repo.applyWrites',
-			{ repo: refreshed.did, writes },
-			refreshed.accessJwt
+	try {
+		response = await session.fetch(`/xrpc/${endpoint}`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ repo: session.did, writes })
+		});
+	} catch (cause) {
+		throw new XrpcError(0, endpoint, `could not reach your PDS: ${String(cause)}`, { cause });
+	}
+
+	if (!response.ok) {
+		const body = await response.text().catch(() => '');
+		throw new XrpcError(
+			response.status,
+			endpoint,
+			`${endpoint} failed with ${response.status}${body ? `: ${body.slice(0, 200)}` : ''}`
 		);
-		return { session: refreshed };
 	}
 }
 
@@ -63,59 +64,49 @@ async function applyWrites(session: Session, writes: ApplyWrite[]): Promise<{ se
  * rather than guessed at.
  */
 export async function deleteFollows(
-	session: Session,
+	session: OwnerSession,
 	rkeys: string[],
-	onBatch: (done: string[], session: Session) => Promise<void>
-): Promise<Session> {
-	let current = session;
-
+	onBatch: (done: string[]) => Promise<void>
+): Promise<void> {
 	for (let i = 0; i < rkeys.length; i += WRITE_BATCH) {
 		const batch = rkeys.slice(i, i + WRITE_BATCH);
-		const result = await applyWrites(
-			current,
+		await applyWrites(
+			session,
 			batch.map((rkey) => ({
 				$type: 'com.atproto.repo.applyWrites#delete',
 				collection: FOLLOW_COLLECTION,
 				rkey
 			}))
 		);
-		current = result.session;
-		await onBatch(batch, current);
+		await onBatch(batch);
 	}
-
-	return current;
 }
 
 /**
  * Create follow records for a set of subjects.
  *
  * Used by restore. The original follow date is not recoverable — a new record
- * has a new `createdAt` — and the subject is notified, which is why the screen
- * says both before anything is sent.
+ * carries a new `createdAt` — and the subject is notified, which is why the
+ * screen says both before anything is sent.
  */
 export async function createFollows(
-	session: Session,
+	session: OwnerSession,
 	subjectDids: string[],
-	onBatch: (done: string[], session: Session) => Promise<void>
-): Promise<Session> {
-	let current = session;
-
+	onBatch: (done: string[]) => Promise<void>
+): Promise<void> {
 	for (let i = 0; i < subjectDids.length; i += WRITE_BATCH) {
 		const batch = subjectDids.slice(i, i + WRITE_BATCH);
 		const createdAt = new Date().toISOString();
-		const result = await applyWrites(
-			current,
+		await applyWrites(
+			session,
 			batch.map((subject) => ({
 				$type: 'com.atproto.repo.applyWrites#create',
 				collection: FOLLOW_COLLECTION,
 				value: { $type: FOLLOW_COLLECTION, subject, createdAt }
 			}))
 		);
-		current = result.session;
-		await onBatch(batch, current);
+		await onBatch(batch);
 	}
-
-	return current;
 }
 
 /**
@@ -126,7 +117,7 @@ export async function createFollows(
  * to get right: deleting a stale rkey fails the batch, and missing a new one
  * leaves the subject followed after the app said otherwise.
  */
-export async function currentFollowRkeys(session: Session): Promise<Map<string, string[]>> {
+export async function currentFollowRkeys(session: OwnerSession): Promise<Map<string, string[]>> {
 	const bySubject = new Map<string, string[]>();
 	for (const follow of await listFollows(session)) {
 		const existing = bySubject.get(follow.subjectDid);

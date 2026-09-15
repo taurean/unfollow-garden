@@ -1,9 +1,10 @@
 /**
  * The thinnest possible XRPC client.
  *
- * v0 talks to atproto with `fetch` and no SDK. The surface the app needs is
- * four endpoints and a rate-limit rule, and an SDK would bring session
- * management this version deliberately keeps in one place.
+ * This app talks to atproto with `fetch` and no SDK. The surface it needs is a
+ * handful of public read endpoints and a rate-limit rule. Authenticated writes
+ * do not come through here at all — they go through the OAuth session's own
+ * DPoP-signing fetch, which is the single place a credential is involved.
  */
 
 /** A request that reached a server and came back as a failure. */
@@ -11,9 +12,10 @@ export class XrpcError extends Error {
 	constructor(
 		readonly status: number,
 		readonly endpoint: string,
-		message: string
+		message: string,
+		options?: ErrorOptions
 	) {
-		super(message);
+		super(message, options);
 		this.name = 'XrpcError';
 	}
 }
@@ -76,7 +78,9 @@ async function request(url: string, init: RequestInit, endpoint: string): Promis
 			// A network-level failure, which for a third-party PDS usually means
 			// it is down or sends no CORS headers. Say which host, because the
 			// browser's own message does not.
-			throw new XrpcError(0, endpoint, `could not reach ${new URL(url).host}: ${String(cause)}`);
+			throw new XrpcError(0, endpoint, `could not reach ${new URL(url).host}: ${String(cause)}`, {
+				cause
+			});
 		}
 
 		if (response.status === 429 && attempt < MAX_RETRIES) {
@@ -101,8 +105,7 @@ async function request(url: string, init: RequestInit, endpoint: string): Promis
 export async function query<T>(
 	service: string,
 	endpoint: string,
-	params: Record<string, string | string[] | undefined> = {},
-	accessJwt?: string
+	params: Record<string, string | string[] | undefined> = {}
 ): Promise<T> {
 	const url = new URL(`/xrpc/${endpoint}`, service);
 	for (const [key, value] of Object.entries(params)) {
@@ -110,23 +113,6 @@ export async function query<T>(
 		// Repeated keys are how XRPC takes arrays, e.g. actors=a&actors=b.
 		for (const item of Array.isArray(value) ? value : [value]) url.searchParams.append(key, item);
 	}
-	const headers: Record<string, string> = {};
-	if (accessJwt) headers.Authorization = `Bearer ${accessJwt}`;
-	return request(url.toString(), { headers }, endpoint) as Promise<T>;
-}
-
-/** A POST against an XRPC endpoint. */
-export async function procedure<T>(
-	service: string,
-	endpoint: string,
-	body: unknown,
-	accessJwt?: string
-): Promise<T> {
-	const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-	if (accessJwt) headers.Authorization = `Bearer ${accessJwt}`;
-	return request(
-		new URL(`/xrpc/${endpoint}`, service).toString(),
-		{ method: 'POST', headers, body: JSON.stringify(body) },
-		endpoint
-	) as Promise<T>;
+	// No credential, ever: every read in this app is public (CONTEXT.md).
+	return request(url.toString(), {}, endpoint) as Promise<T>;
 }

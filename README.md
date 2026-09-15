@@ -12,20 +12,24 @@ unfollow-garden puts everything needed for the call on one screen: bio, follow-b
 
 **Nothing changes until you say so.** Marking an account for unfollow doesn't touch your repo. When the review is done, you review the full list, then run it. Every run is recorded, so an interrupted run resumes and a completed run can be reversed.
 
-**No server holds your data.** Reads come from public atproto endpoints. Writes go straight from your browser to your own PDS. There is no backend, no database, and no analytics — in v0 there is no server at all.
+**No server holds your data.** Reads come from public atproto endpoints. Writes go straight from your browser to your own PDS. There is no backend, no database, and no analytics — there is no server at all.
 
 `PRD.md` is the full specification: user stories, activity-metric definitions, storage schema, and edge cases.
 
 ## Status
 
-**v0, local only.** It signs in with an app password and runs on your machine;
-it is not deployed and should not be. The triage loop works end to end: sign in,
-load your follows, decide one account at a time, decisions saved as you go.
+**Feature-complete, not yet deployed.** The whole loop works: sign in with
+atproto OAuth, load your follows, review each account against a year of its
+activity, then unfollow the marked ones in a recorded, resumable run you can
+reverse afterwards.
 
-Unfollow runs do not exist yet, so nothing can currently be unfollowed.
+Sign-in asks for one permission — to add and remove follow records — and
+nothing else. You authenticate on your own server; this app never sees a
+password.
 
-v1 replaces app passwords with atproto OAuth scoped to follow records, and adds
-a deployment. `PRD.md`, "Version 0" records exactly what differs and why.
+What is left before a deploy is choosing a hostname. `client_id` is a URL that
+authorization servers fetch and that appears on your consent screen, so it is
+worth picking deliberately (`PRD.md`, open question 3).
 
 Building toward v1 in five slices:
 
@@ -40,9 +44,9 @@ Building toward v1 in five slices:
 | Concern         | Choice                                                                           |
 | --------------- | -------------------------------------------------------------------------------- |
 | Framework       | SvelteKit (Svelte 5), client-rendered — routes set `ssr = false`                 |
-| Hosting         | None in v0; static build, run locally                                            |
+| Hosting         | None yet; static build, runs locally or on any static host                       |
 | Persistence     | IndexedDB in the browser, via `idb`                                              |
-| Auth            | App password in v0; atproto OAuth in v1                                          |
+| Auth            | atproto OAuth, public browser client, scoped to follow records                   |
 | Tests           | Vitest (+ Playwright browser tests)                                              |
 | Component dev   | Storybook                                                                        |
 | UI primitives   | Bits UI + [@taurean/stylebase](https://www.npmjs.com/package/@taurean/stylebase) |
@@ -55,11 +59,25 @@ pnpm install
 pnpm dev
 ```
 
-Then open the URL it prints and sign in with your handle and an **app password** — not your account password. Create one in the Bluesky app under Settings → Privacy and security → App passwords.
+Open **`http://127.0.0.1:5173`** — not `localhost:5173`. RFC 8252 bans the
+`localhost` hostname in OAuth redirect URIs, so the sign-in redirect comes back
+to `127.0.0.1`, and a `localhost` tab has nothing listening at the other end.
 
-The app password is used once to sign in and is never stored. Only the resulting session token is kept, in `sessionStorage`, so it is gone when you close the tab. Your decisions live in IndexedDB and survive.
+Enter your handle and you are sent to your own server to sign in. This app never
+receives a password. What it asks for is one permission — create and delete
+`app.bsky.graph.follow` records — which you can read on the consent screen
+before granting it.
 
-**An app password grants full account access**, which is far more than this app uses. That is the v0 trade: no hosted client identity, no deployment, in exchange for a credential broader than the task. It is why v0 is for your own account on your own machine, and why v1 moves to OAuth scoped to follow records and nothing else.
+Your decisions live in IndexedDB and survive closing the tab.
+
+To build for a real origin:
+
+```bash
+PUBLIC_APP_ORIGIN=https://your-host pnpm build
+```
+
+That origin is baked into `oauth-client-metadata.json` at build time, because a
+static site has no server to derive it from a request.
 
 Day-to-day scripts:
 
@@ -80,8 +98,9 @@ The quality gate before any task is called done: `pnpm check`, `pnpm lint`, and 
 
 - No analytics, telemetry, or third-party scripts.
 - Data leaves the browser only as requests to the Bluesky AppView, `plc.directory`, subjects' PDSes, and your own PDS and authorization server.
-- **In v0, the app password you sign in with grants full account access.** The app only ever reads follows and profiles, but the credential permits more. v1 replaces it with an OAuth scope of `atproto repo:app.bsky.graph.follow?action=create&action=delete`, which permits creating and deleting follow records and nothing else.
-- The app password is used once and never stored; the session token it returns lives in `sessionStorage` and dies with the tab.
+- **The app's entire grant is `atproto repo:app.bsky.graph.follow?action=create&action=delete`** — it can add and remove follows, and cannot read your messages, post as you, or touch anything else in your repo. Your consent screen states it.
+- You authenticate on your own server. This app never handles a credential; tokens are DPoP-bound and held by the OAuth library.
+- Every account lookup uses public, unauthenticated endpoints. The grant is used only to add and remove follows during runs.
 - Decisions and run history never leave your browser except through an export you initiate.
 
 ## Working on this project

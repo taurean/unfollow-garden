@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RunController } from './runs.svelte';
 import { db, loadDecisions, loadRuns, loadUndoStack, saveDecision } from '$lib/storage/db';
-import type { Session } from '$lib/atproto/session';
+import type { OwnerSession } from '$lib/atproto/oauth';
 import type { FollowSnapshot } from '$lib/storage/db';
 
 /**
@@ -32,28 +32,26 @@ vi.mock('$lib/atproto/writes', async (importOriginal) => {
 		}),
 		deleteFollows: vi.fn(
 			async (
-				session: Session,
+				_session: OwnerSession,
 				rkeys: string[],
-				onBatch: (done: string[], session: Session) => Promise<void>
+				onBatch: (done: string[]) => Promise<void>
 			) => {
 				for (const rkey of rkeys) {
 					if (deleted.length >= failAfter.value) throw new Error('network went away');
 					deleted.push(rkey);
-					await onBatch([rkey], session);
+					await onBatch([rkey]);
 				}
-				return session;
 			}
 		)
 	};
 });
 
-const session: Session = {
+const session: OwnerSession = {
 	did: 'did:plc:owner',
 	handle: 'owner.test',
 	pds: 'https://pds.test',
-	loginService: 'https://pds.test',
-	accessJwt: 'access',
-	refreshJwt: 'refresh'
+	// Never reached: every write goes through the mocked writes module.
+	fetch: async () => new Response(null, { status: 200 })
 };
 
 function subject(did: string, rkeys: string[]): FollowSnapshot {
@@ -88,7 +86,7 @@ describe('starting a run', () => {
 		listed.value = [{ rkey: 'r1', subjectDid: 'did:plc:a', followedAt: null }];
 		const controller = new RunController();
 
-		await controller.startUnfollow(session, [subject('did:plc:a', ['r1'])], () => {});
+		await controller.startUnfollow(session, [subject('did:plc:a', ['r1'])]);
 
 		const runs = await loadRuns(session.did);
 		expect(runs).toHaveLength(1);
@@ -104,7 +102,7 @@ describe('starting a run', () => {
 		];
 		const controller = new RunController();
 
-		await controller.startUnfollow(session, [subject('did:plc:a', ['r1'])], () => {});
+		await controller.startUnfollow(session, [subject('did:plc:a', ['r1'])]);
 
 		expect(deleted).toEqual(['r1', 'r2', 'r3']);
 	});
@@ -114,7 +112,7 @@ describe('starting a run', () => {
 		listed.value = [{ rkey: 'fresh', subjectDid: 'did:plc:a', followedAt: null }];
 		const controller = new RunController();
 
-		await controller.startUnfollow(session, [subject('did:plc:a', ['stale'])], () => {});
+		await controller.startUnfollow(session, [subject('did:plc:a', ['stale'])]);
 
 		expect(deleted).toEqual(['fresh']);
 	});
@@ -123,31 +121,42 @@ describe('starting a run', () => {
 		listed.value = [];
 		const controller = new RunController();
 
-		await controller.startUnfollow(session, [subject('did:plc:a', ['gone'])], () => {});
+		await controller.startUnfollow(session, [subject('did:plc:a', ['gone'])]);
 
 		expect(deleted).toEqual([]);
 		const decisions = await loadDecisions(session.did);
 		expect(decisions.get('did:plc:a')?.decision).toBe('unfollowed');
 	});
 
-	it('records the decision only once every one of a subject’s records is gone', async () => {
+	it('does not mark a subject unfollowed while one of their records survives', async () => {
+		// Followed twice, and the run dies between the two deletes. Calling that
+		// subject unfollowed would be a lie the queue then acts on.
+		listed.value = [
+			{ rkey: 'r1', subjectDid: 'did:plc:a', followedAt: null },
+			{ rkey: 'r2', subjectDid: 'did:plc:a', followedAt: null }
+		];
+		failAfter.value = 1;
+		const controller = new RunController();
+
+		await controller.startUnfollow(session, [subject('did:plc:a', ['r1'])]);
+
+		expect(deleted).toEqual(['r1']);
+		expect(controller.run?.targets[0].status).toBe('pending');
+		expect((await loadDecisions(session.did)).get('did:plc:a')).toBeUndefined();
+	});
+
+	it('records the decision once every one of a subject’s records is gone', async () => {
 		listed.value = [
 			{ rkey: 'r1', subjectDid: 'did:plc:a', followedAt: null },
 			{ rkey: 'r2', subjectDid: 'did:plc:a', followedAt: null }
 		];
 		const controller = new RunController();
-		const seen: Array<string | undefined> = [];
 
-		// The mock delivers one rkey per batch, so the decision must not land
-		// until the second.
-		const original = controller;
-		await original.startUnfollow(session, [subject('did:plc:a', ['r1'])], () => {
-			seen.push(undefined);
-		});
+		await controller.startUnfollow(session, [subject('did:plc:a', ['r1'])]);
 
-		const decisions = await loadDecisions(session.did);
-		expect(decisions.get('did:plc:a')?.decision).toBe('unfollowed');
-		expect(original.run?.targets[0].status).toBe('done');
+		expect(deleted).toEqual(['r1', 'r2']);
+		expect(controller.run?.targets[0].status).toBe('done');
+		expect((await loadDecisions(session.did)).get('did:plc:a')?.decision).toBe('unfollowed');
 	});
 
 	it('takes unfollowed subjects off the undo stack', async () => {
@@ -155,7 +164,7 @@ describe('starting a run', () => {
 		await saveDecision(session.did, 'did:plc:a', 'unfollow');
 		listed.value = [{ rkey: 'r1', subjectDid: 'did:plc:a', followedAt: null }];
 
-		await new RunController().startUnfollow(session, [subject('did:plc:a', ['r1'])], () => {});
+		await new RunController().startUnfollow(session, [subject('did:plc:a', ['r1'])]);
 
 		expect(await loadUndoStack(session.did)).toEqual([]);
 	});
@@ -171,11 +180,11 @@ describe('an interrupted run', () => {
 		failAfter.value = 2;
 		const controller = new RunController();
 
-		await controller.startUnfollow(
-			session,
-			[subject('did:plc:a', ['r1']), subject('did:plc:b', ['r2']), subject('did:plc:c', ['r3'])],
-			() => {}
-		);
+		await controller.startUnfollow(session, [
+			subject('did:plc:a', ['r1']),
+			subject('did:plc:b', ['r2']),
+			subject('did:plc:c', ['r3'])
+		]);
 
 		expect(deleted).toEqual(['r1', 'r2']);
 		expect(controller.run?.status).toBe('interrupted');
@@ -185,7 +194,7 @@ describe('an interrupted run', () => {
 	it('is offered for resumption on the next load', async () => {
 		listed.value = [{ rkey: 'r1', subjectDid: 'did:plc:a', followedAt: null }];
 		failAfter.value = 0;
-		await new RunController().startUnfollow(session, [subject('did:plc:a', ['r1'])], () => {});
+		await new RunController().startUnfollow(session, [subject('did:plc:a', ['r1'])]);
 
 		const fresh = new RunController();
 		await fresh.findUnfinished(session.did);
@@ -200,16 +209,15 @@ describe('an interrupted run', () => {
 		];
 		failAfter.value = 1;
 		const controller = new RunController();
-		await controller.startUnfollow(
-			session,
-			[subject('did:plc:a', ['r1']), subject('did:plc:b', ['r2'])],
-			() => {}
-		);
+		await controller.startUnfollow(session, [
+			subject('did:plc:a', ['r1']),
+			subject('did:plc:b', ['r2'])
+		]);
 		expect(deleted).toEqual(['r1']);
 
 		failAfter.value = Infinity;
 		await controller.findUnfinished(session.did);
-		await controller.resume(session, () => {});
+		await controller.resume(session);
 		expect(controller.error).toBeNull();
 
 		// r1 is gone from the repo, so the resumed run finds only r2 to delete.
@@ -223,7 +231,7 @@ describe('a completed run', () => {
 		const { runAsJson } = await import('./runs.svelte');
 		listed.value = [{ rkey: 'r1', subjectDid: 'did:plc:a', followedAt: null }];
 		const controller = new RunController();
-		await controller.startUnfollow(session, [subject('did:plc:a', ['r1'])], () => {});
+		await controller.startUnfollow(session, [subject('did:plc:a', ['r1'])]);
 
 		const parsed = JSON.parse(runAsJson(controller.run!));
 

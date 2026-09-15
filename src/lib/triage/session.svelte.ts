@@ -1,5 +1,12 @@
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
-import { signIn, type Session } from '$lib/atproto/session';
+import type { BrowserOAuthClient } from '@atproto/oauth-client-browser';
+import {
+	createOAuthClient,
+	restoreOwner,
+	signOutOwner,
+	startSignIn,
+	type OwnerSession
+} from '$lib/atproto/oauth';
 import { getFollowsOwner, getProfiles, listFollows } from '$lib/atproto/graph';
 import {
 	exportOwner,
@@ -41,33 +48,14 @@ export type Phase =
 	| 'settings';
 
 /**
- * Where the session token lives.
+ * Tokens are the library's problem, not this file's.
  *
- * `sessionStorage`, not `localStorage`: in v0 the token is minted from an app
- * password and therefore carries full account access. It should not outlive the
- * tab. Decisions live in IndexedDB and do survive, so closing the tab costs a
- * sign-in and nothing else.
+ * v0 kept app-password tokens in `sessionStorage` so a full-access credential
+ * would die with the tab. OAuth removes the need: tokens are DPoP-bound, held
+ * by `@atproto/oauth-client-browser` in IndexedDB, and refreshed on their own.
+ * Application code never touches a credential, so there is nothing here to
+ * store or clear.
  */
-const SESSION_KEY = 'unfollow-garden:session';
-
-function storeSession(session: Session | null) {
-	try {
-		if (session) sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
-		else sessionStorage.removeItem(SESSION_KEY);
-	} catch {
-		// Private browsing and blocked site data both throw here. Losing the
-		// session across a reload is a worse experience, not a broken app.
-	}
-}
-
-function readSession(): Session | null {
-	try {
-		const raw = sessionStorage.getItem(SESSION_KEY);
-		return raw ? (JSON.parse(raw) as Session) : null;
-	} catch {
-		return null;
-	}
-}
 
 /** What the loading screen is currently doing. */
 export interface Progress {
@@ -78,7 +66,15 @@ export interface Progress {
 
 export class TriageSession {
 	phase = $state<Phase>('signed-out');
-	session = $state<Session | null>(null);
+	session = $state<OwnerSession | null>(null);
+
+	/**
+	 * The OAuth client, built once on mount.
+	 *
+	 * Held rather than rebuilt per call because `revoke` and `init` have to run
+	 * against the same IndexedDB-backed store that issued the session.
+	 */
+	private client: BrowserOAuthClient | null = null;
 	error = $state<string | null>(null);
 	progress = $state<Progress>({ step: '', loaded: 0, total: null });
 
@@ -112,6 +108,15 @@ export class TriageSession {
 
 	/** What the last import did, so the user is told rather than left guessing. */
 	importReport = $state<ImportReport | null>(null);
+
+	/**
+	 * Why follow-back status is missing, when it is.
+	 *
+	 * Separate from `error` because it does not stop anything: the review still
+	 * works, it is just missing one signal. Held so the screen can say "unknown"
+	 * instead of letting a blank read as "no".
+	 */
+	followBackError = $state<string | null>(null);
 
 	/** The phase to return to when settings closes. */
 	private phaseBeforeSettings: Phase = 'triage';
@@ -169,22 +174,43 @@ export class TriageSession {
 		return total;
 	}
 
-	/** Restore a session left in this tab, if there is one. */
+	/**
+	 * Build the OAuth client and pick up whatever state the page loaded with.
+	 *
+	 * One call covers both a redirect back from the authorization server and an
+	 * ordinary reload with a live session, because the app is a single route and
+	 * the callback lands on it. Browser-only, so it runs from `onMount`.
+	 */
 	async restore(): Promise<void> {
-		const session = readSession();
-		if (!session) return;
-		this.session = session;
-		await this.loadEverything(session, { refetch: false });
+		try {
+			this.client = await createOAuthClient();
+			const restored = await restoreOwner(this.client);
+			if (!restored) return;
+			this.session = restored.session;
+			await this.loadEverything(restored.session, { refetch: false });
+		} catch (cause) {
+			// A denied or failed authorization comes back through here, and the
+			// reason is the only thing that tells the user what to do next
+			// (PRD, AUTH-1).
+			this.error = cause instanceof Error ? cause.message : String(cause);
+			this.phase = 'signed-out';
+		}
 	}
 
-	async signIn(handle: string, appPassword: string): Promise<void> {
+	/**
+	 * Hand off to the user's own authorization server.
+	 *
+	 * This navigates away, so nothing after it runs on success. The app comes
+	 * back through `restore`.
+	 */
+	async signIn(handle: string): Promise<void> {
+		const client = this.client;
+		if (!client) return;
+
 		this.error = null;
 		this.phase = 'signing-in';
 		try {
-			const session = await signIn(handle, appPassword);
-			this.session = session;
-			storeSession(session);
-			await this.loadEverything(session, { refetch: true });
+			await startSignIn(client, handle);
 		} catch (cause) {
 			this.error = cause instanceof Error ? cause.message : String(cause);
 			this.phase = 'signed-out';
@@ -211,14 +237,40 @@ export class TriageSession {
 		}
 	}
 
-	signOut(): void {
-		storeSession(null);
+	/**
+	 * End the session with the authorization server, not just locally.
+	 *
+	 * Revoking is the part that matters: clearing app state alone leaves the
+	 * tokens live in the library's store, and the next load would sign the user
+	 * straight back in. Decisions stay — they are the user's, and signing out is
+	 * not a request to forget them (PRD, AUTH-2).
+	 */
+	async signOut(): Promise<void> {
+		const client = this.client;
+		const did = this.session?.did;
+
 		this.session = null;
 		this.subjects = [];
 		this.decisions.clear();
 		this.skipped.clear();
 		this.current = null;
+		this.error = null;
 		this.phase = 'signed-out';
+
+		if (!client || !did) return;
+
+		try {
+			await signOutOwner(client, did);
+		} catch (cause) {
+			// The screen already says signed out, and the local state is gone. But
+			// a revoke that did not reach the server may leave the grant live, and
+			// silently looking signed out while still being authorized is the one
+			// version of this the user must not be left with.
+			this.error =
+				`Signed out here, but your server could not be reached to revoke the ` +
+				`session: ${cause instanceof Error ? cause.message : String(cause)}. ` +
+				`Revoke it from your account settings if that matters to you.`;
+		}
 	}
 
 	/**
@@ -227,7 +279,10 @@ export class TriageSession {
 	 * `refetch: false` uses the stored snapshot, so reopening a review does not
 	 * re-read a few thousand follows to show the same list.
 	 */
-	private async loadEverything(session: Session, { refetch }: { refetch: boolean }): Promise<void> {
+	private async loadEverything(
+		session: OwnerSession,
+		{ refetch }: { refetch: boolean }
+	): Promise<void> {
 		this.phase = 'loading';
 		this.error = null;
 
@@ -258,18 +313,28 @@ export class TriageSession {
 					loaded: 0,
 					total: subjectDids.length
 				};
-				// Follow-back status is a nice-to-have on the card, not a reason
-				// to fail a load that already has every profile.
-				const followsOwner = await getFollowsOwner(session.did, subjectDids, (loaded) => {
-					this.progress = {
-						step: 'Checking who follows you back',
-						loaded,
-						total: subjectDids.length
-					};
-					// An empty result is passed straight to saveFollows and never
-					// held in reactive state.
-					// eslint-disable-next-line svelte/prefer-svelte-reactivity
-				}).catch(() => new Map<string, boolean>());
+				/*
+				 * Follow-back status is a nice-to-have on the card, not a reason to
+				 * fail a load that already has every profile — but the failure is
+				 * recorded rather than swallowed. Without the note, a rejected
+				 * lookup just means no card ever shows "follows you", and absence
+				 * reads as "they do not follow you back", which is a different
+				 * claim and one the reader would act on.
+				 */
+				// eslint-disable-next-line svelte/prefer-svelte-reactivity
+				let followsOwner = new Map<string, boolean>();
+				try {
+					followsOwner = await getFollowsOwner(session.did, subjectDids, (loaded) => {
+						this.progress = {
+							step: 'Checking who follows you back',
+							loaded,
+							total: subjectDids.length
+						};
+					});
+					this.followBackError = null;
+				} catch (cause) {
+					this.followBackError = cause instanceof Error ? cause.message : String(cause);
+				}
 
 				subjects = await saveFollows(session.did, follows, profiles, followsOwner);
 			}
@@ -402,10 +467,7 @@ export class TriageSession {
 		if (!session) return;
 
 		const subjectDids = run.targets.map((target) => target.subjectDid);
-		await this.runs.restore(session, run, subjectDids, (next) => {
-			this.session = next;
-			storeSession(next);
-		});
+		await this.runs.restore(session, run, subjectDids);
 		await this.refreshDecisions();
 	}
 
@@ -438,10 +500,7 @@ export class TriageSession {
 		if (!session) return;
 
 		this.phase = 'running';
-		await this.runs.startUnfollow(session, $state.snapshot(this.marked), (next) => {
-			this.session = next;
-			storeSession(next);
-		});
+		await this.runs.startUnfollow(session, $state.snapshot(this.marked));
 		await this.refreshDecisions();
 	}
 
@@ -451,10 +510,7 @@ export class TriageSession {
 		if (!session) return;
 
 		this.phase = 'running';
-		await this.runs.resume(session, (next) => {
-			this.session = next;
-			storeSession(next);
-		});
+		await this.runs.resume(session);
 		await this.refreshDecisions();
 	}
 

@@ -4,42 +4,60 @@ Non-obvious constraints and gotchas specific to this project. Things a
 reasonable person would get wrong on first contact, and the reason each one is
 the way it is. `PRD.md` owns product behaviour; this file owns the traps.
 
-## This is v0, and it is not the app the PRD describes
+## The scope is the product's promise, and it is one line
 
-v0 signs in with an **app password** and runs **only on your machine**. The
-PRD's Authentication and Architecture sections describe v1 and are not what is
-built. `PRD.md`, "Version 0" is the reconciliation; read it before implementing
-anything from those sections.
+`src/lib/atproto/client-config.ts` holds `SCOPE`, and the whole of the grant is:
 
-## An app password is a full-access credential
+    atproto repo:app.bsky.graph.follow?action=create&action=delete
 
-`com.atproto.server.createSession` with an app password returns a token that can
-read direct messages, post, and delete anything in the repo. This app uses none
-of that — but the credential permits it, which is why:
+The app may add and remove follow records. It cannot read a message, post, or
+touch another collection. That narrowness is most of why this app is
+defensible to someone who is not its author — the consent screen states it, and
+the user can hold the app to it.
 
-- v0 is for your own account on your own machine, and is not deployed.
-- The app password is used once at sign-in and never stored.
-- Session tokens go in `sessionStorage`, not `localStorage`, so they die with
-  the tab. Decisions live in IndexedDB and survive, so closing the tab costs a
-  sign-in and nothing more.
+Two things follow, and both are guardrails in `CLAUDE.md`:
 
-The narrow OAuth scope in v1 is what makes this app defensible to anyone who is
-not its author. Until then, treat the deployment question as closed.
+- **`transition:generic` is never a fallback.** An authorization server that
+  rejects granular scopes fails the sign-in with its own error shown. It does
+  not get quietly handed the whole account instead.
+- **`create` is there because restore exists.** Re-following the targets of a
+  past run is the app's undo (PRD, RESTORE-1). Drop restore and `create` goes
+  with it.
 
-## Bluesky accounts do not log in at their own PDS
+The scope string lives in exactly one module because the prerendered client
+metadata and the browser sign-in both read it. Two copies would drift, and the
+copy that drifts is the one on the consent screen.
 
-A Bluesky-hosted account's DID document names a PDS like
-`shiitake.us-east.host.bsky.network`. Those hosts store the repo but
-authenticate nobody — `createSession` has to go to `https://bsky.social`, which
-issues tokens the PDS then accepts.
+## Reads need no grant, and that is what keeps the scope small
 
-Send credentials to the PDS host instead and it fails as an authentication
-error, which reads exactly like a mistyped app password. Self-hosted PDSes
-authenticate for themselves and are used as-is.
+`com.atproto.repo.listRecords` is public, so the owner's own follow records are
+read unauthenticated like everything else. If that read were authenticated the
+scope would have to widen to permit it, for no gain.
 
-`pdsForLogin` in `src/lib/atproto/identity.ts` is the whole of it, and it is
-unit tested. OAuth removes the distinction, so this function is deleted rather
-than carried forward when v1 lands.
+`src/lib/atproto/xrpc.ts` therefore has no way to send a credential at all — it
+lost its `procedure` helper and its `accessJwt` parameter when OAuth landed.
+Authenticated writes do not go through it; they go through the OAuth session's
+own DPoP-signing fetch, in `writes.ts`. That is the entire authenticated surface
+of the app, and it is deliberately one small file.
+
+## Development has to run on 127.0.0.1, not localhost
+
+RFC 8252 bans the `localhost` hostname in OAuth redirect URIs, so the loopback
+flow redirects to `http://127.0.0.1:5173/`. `vite.config.ts` sets
+`server: { host: '127.0.0.1' }` for this reason. Open the 127.0.0.1 URL; a
+`localhost` tab gets redirected back to an origin nothing is listening on, and
+the failure looks like the callback is broken rather than the hostname.
+
+On an `http:` origin the client uses the **loopback `client_id` form** — a
+`http://localhost?redirect_uri=…&scope=…` URL that carries its own metadata, so
+the authorization server never fetches the metadata document. That is why local
+development needs no hostname and no deployment. `createOAuthClient` picks the
+form by protocol.
+
+Related: build with `BrowserOAuthClient.load()`, never
+`new BrowserOAuthClient({ clientMetadata })`. The constructor validates metadata
+inline and rejects any non-HTTPS `client_id`, which makes the loopback form
+impossible.
 
 ## There is no Content-Security-Policy right now
 
@@ -62,8 +80,11 @@ it does with a list of people you plan to unfollow. A server-side session store,
 a sync backend, or an analytics call each re-open that decision.
 
 Note that the `atprotocol-oauth` global skill's guide includes a server-side
-HMAC session-cookie step. **Skip it.** That step exists for apps that keep auth
-state on a server; this one does not. The rest of that skill applies when v1 lands.
+HMAC session-cookie step, plus a `hooks.server.ts`, a `+layout.server.ts` auth
+guard and a dedicated `/auth/callback` route. **Skip all of it.** Those exist
+for apps that keep auth state on a server; this one has no server. Auth state is
+the OAuth library's IndexedDB store, and the callback lands on the single route
+the app already has, where `client.init()` picks it up.
 
 ## Unlayered CSS beats every cascade layer
 
@@ -108,20 +129,17 @@ storage layer cannot defend against this itself — `$state.snapshot` is a
 compiler rune and `db.ts` is a plain `.ts` file — so it is a call-site
 discipline, and the resume test is what holds it.
 
-## Reads are public; the session is for writes only
-
-Every account lookup uses public, unauthenticated endpoints on the AppView,
-`plc.directory`, and subjects' PDSes. The OAuth session is used solely for
-`applyWrites` against the owner's repo during runs. An authenticated read would
-widen the scope the app has to request, for no gain.
-
 ## Deliberately unresolved
 
 Recorded so nobody assumes these were settled and moved on:
 
-- **The production origin.** Not blocking while v0 is local-only, but it
-  blocks the v1 deploy: `client_id` is a URL authorization servers fetch, and it
-  appears on the consent screen. (PRD open question 3.)
+- **The production origin.** The code no longer blocks on it: the client
+  metadata route prerenders from `PUBLIC_APP_ORIGIN`, so a deploy is
+  `PUBLIC_APP_ORIGIN=https://example pnpm build` and nothing else. The
+  _hostname_ is still unchosen, and it is not a throwaway decision —
+  `client_id` is that URL, authorization servers fetch it, and it appears on
+  the consent screen where someone decides whether to trust this app. (PRD
+  open question 3.)
 - **The favicon.** `src/lib/assets/favicon.svg` is still the stock Svelte logo.
   Replacing it is a visual-contract decision, which the authoring boundaries
   make human-owned.

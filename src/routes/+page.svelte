@@ -24,7 +24,7 @@
 		<SignIn
 			busy={session.phase === 'signing-in'}
 			error={session.error}
-			onSignIn={(handle, appPassword) => session.signIn(handle, appPassword)}
+			onSignIn={(handle) => session.signIn(handle)}
 		/>
 	{:else if session.phase === 'loading'}
 		<LoadingScreen progress={session.progress} />
@@ -51,6 +51,7 @@
 		{#if session.phase !== 'settings' && session.phase !== 'running'}
 			<div class="utility">
 				<Button data-variant="link" onclick={() => session.openSettings()}>Settings</Button>
+				<Button data-variant="link" onclick={() => session.signOut()}>Sign out</Button>
 			</div>
 		{/if}
 
@@ -82,7 +83,6 @@
 							Go back to {exact(session.skippedCount)} skipped
 						</Button>
 					{/if}
-					<Button data-variant="quiet" onclick={() => session.signOut()}>Sign out</Button>
 				</div>
 			</section>
 		{/if}
@@ -128,6 +128,8 @@
 			top: 0;
 			right: 0;
 			z-index: 1;
+			display: flex;
+			gap: var(--space-lg);
 			padding: var(--space-sm) var(--space-lg);
 		}
 
