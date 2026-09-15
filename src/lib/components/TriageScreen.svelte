@@ -1,9 +1,19 @@
 <script lang="ts">
 	import AccountCard from '$lib/components/AccountCard.svelte';
+	import RecentColumns from '$lib/components/RecentColumns.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
+	import { exact } from '$lib/format';
 	import type { TriageSession } from '$lib/triage/session.svelte';
 
 	let { session }: { session: TriageSession } = $props();
+
+	const activity = $derived(
+		session.current
+			? session.scanner.get(session.current.subjectDid)
+			: { status: 'pending' as const, activity: null, error: null, lastActive: null }
+	);
+
+	const recent = $derived(activity.activity?.recent ?? []);
 
 	/**
 	 * Keyboard triage.
@@ -40,16 +50,23 @@
 
 <svelte:window onkeydown={onKeydown} />
 
-<section class="triage">
-	<header class="l:repel counts u:fs-1">
+<section class="stage">
+	<header class="status u:fs-0 tabular">
 		<p>
-			<strong>{session.remaining.length.toLocaleString()}</strong> to review
+			<strong>{exact(session.remaining.length)}</strong> to review
 			{#if session.skippedCount > 0}
-				<span class="muted">· {session.skippedCount.toLocaleString()} skipped</span>
+				· {exact(session.skippedCount)} skipped
 			{/if}
+			· {exact(session.keptCount)} kept · {exact(session.markedCount)} marked
 		</p>
-		<p class="muted">
-			{session.keptCount.toLocaleString()} kept · {session.markedCount.toLocaleString()} marked
+
+		<p role="status">
+			{#if session.scanner.waitingOnRateLimit}
+				Waiting out a rate limit…
+			{:else if session.scanner.running}
+				Loading activity {exact(session.scanner.loaded)} of {exact(session.scanner.total)} · order settles
+				when loading finishes
+			{/if}
 		</p>
 	</header>
 
@@ -59,110 +76,151 @@
 
 	{#if session.current}
 		{#key session.current.subjectDid}
-			<AccountCard subject={session.current} />
+			<AccountCard
+				subject={session.current}
+				{activity}
+				lookbackDays={session.settings.lookbackDays}
+				thresholdDays={session.settings.thresholdDays}
+			/>
 		{/key}
 
 		<div class="actions">
-			<Button onclick={() => session.decide('keep')}>Keep <kbd>K</kbd></Button>
-			<Button class="action--unfollow" onclick={() => session.decide('unfollow')}>
+			<Button data-variant="keep" onclick={() => session.decide('keep')}>
+				Keep <kbd>K</kbd>
+			</Button>
+			<Button data-variant="unfollow" onclick={() => session.decide('unfollow')}>
 				Unfollow <kbd>U</kbd>
 			</Button>
-			<Button class="action--quiet" onclick={() => session.skip()}>Skip <kbd>S</kbd></Button>
-			<Button class="action--quiet" onclick={() => session.undo()}>Undo <kbd>Z</kbd></Button>
-		</div>
 
-		<p class="note u:fs-0">
-			Marking an account for unfollow changes nothing yet. Runs happen after you review the full
-			list.
-		</p>
+			<div class="quiet-actions">
+				<Button data-variant="quiet" onclick={() => session.skip()}>Skip <kbd>S</kbd></Button>
+				<Button data-variant="quiet" onclick={() => session.undo()}>Undo <kbd>Z</kbd></Button>
+			</div>
+
+			<p class="scope u:fs-0">
+				checking data from the last {session.settings.lookbackDays} days<br />
+				marking changes nothing yet — unfollows happen in a run
+			</p>
+		</div>
 	{/if}
 </section>
 
+{#if session.current?.profile && activity.status === 'ready'}
+	<section class="recent">
+		<RecentColumns {recent} />
+	</section>
+{/if}
+
 <style>
-	.triage {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-lg);
-		max-width: 44rem;
-		margin-inline: auto;
-		padding-block: var(--space-xl);
-	}
-
-	.counts {
-		font-variant-numeric: tabular-nums;
-		flex-wrap: wrap;
-		gap: var(--space-sm);
-	}
-
-	.counts p {
-		margin: 0;
-	}
-
-	.muted {
-		color: var(--hue-slate-600);
-	}
-
-	.error {
-		margin: 0;
-		color: var(--hue-red-700);
-	}
-
-	.actions {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--space-xs);
-		margin-block-start: var(--space-sm);
-	}
-
-	/*
-	 * Keep and unfollow are told apart by more than colour: each carries its own
-	 * word and its own shortcut key, so the pair still reads when colour does
-	 * not (PRD, "Interface").
-	 */
-	.actions :global(.action--unfollow) {
-		background-color: var(--hue-red-600);
-	}
-
-	.actions :global(.action--unfollow:hover:not(:disabled)) {
-		background-color: var(--hue-red-700);
-	}
-
-	.actions :global(.action--quiet) {
-		background-color: transparent;
-		color: var(--hue-slate-700);
-		border: 1px solid var(--hue-slate-300);
-	}
-
-	.actions :global(.action--quiet:hover:not(:disabled)) {
-		background-color: var(--hue-slate-100);
-	}
-
-	kbd {
-		font-family: var(--ff-mono);
-		font-size: var(--fs-0);
-		opacity: 0.7;
-		margin-inline-start: var(--space-3xs);
-	}
-
-	.note {
-		margin: 0;
-		color: var(--hue-slate-600);
-	}
-
-	@media (prefers-color-scheme: dark) {
-		.muted,
-		.note {
-			color: var(--hue-slate-400);
+	@layer layout {
+		.stage {
+			display: flex;
+			flex-direction: column;
+			gap: var(--space-xl);
+			max-inline-size: var(--stage-max);
+			margin-inline: auto;
+			padding: var(--space-xl) var(--space-lg) var(--space-2xl);
+			/* Room for the fixed wordmark tab on the viewport's left edge. */
+			padding-inline-start: var(--space-2xl);
 		}
+
+		.status {
+			display: flex;
+			flex-wrap: wrap;
+			justify-content: space-between;
+			gap: var(--space-sm);
+			font-family: var(--ff-ui);
+			color: var(--ink-quiet);
+		}
+
+		.status p {
+			margin: 0;
+		}
+
 		.error {
-			color: var(--hue-red-400);
+			margin: 0;
+			font-family: var(--ff-ui);
+			color: var(--danger-ink);
 		}
-		.actions :global(.action--quiet) {
-			color: var(--hue-slate-300);
-			border-color: var(--hue-slate-700);
+
+		.actions {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: var(--space-sm);
 		}
-		.actions :global(.action--quiet:hover:not(:disabled)) {
-			background-color: var(--hue-slate-900);
+
+		/* Skip and undo are set apart from the two decisions, not lined up with
+		   them: they are ways out, not a third and fourth choice. */
+		.quiet-actions {
+			display: flex;
+			gap: var(--space-2xs);
+			margin-inline-start: var(--space-lg);
+		}
+
+		.scope {
+			margin: 0;
+			margin-inline-start: auto;
+			text-align: end;
+			font-family: var(--ff-ui);
+			color: var(--ink-quiet);
+		}
+
+		/*
+		 * The recent columns sit on their own surface below the fold. Everything
+		 * needed to decide is above it; this is for when that was not enough.
+		 */
+		.recent {
+			background-color: var(--surface-raised);
+			border-block-start: 1px solid var(--hue-z0-divider);
+			padding: var(--space-2xl) var(--space-lg) var(--space-2xl) var(--space-2xl);
+		}
+
+		.recent :global(.columns) {
+			max-inline-size: var(--stage-max);
+			margin-inline: auto;
+		}
+
+		.actions :global(.button[data-variant='keep']) {
+			background-color: var(--keep);
+		}
+
+		.actions :global(.button[data-variant='keep']:hover:not(:disabled)) {
+			background-color: var(--keep-hover);
+		}
+
+		.actions :global(.button[data-variant='unfollow']) {
+			background-color: var(--unfollow);
+		}
+
+		.actions :global(.button[data-variant='unfollow']:hover:not(:disabled)) {
+			background-color: var(--unfollow-hover);
+		}
+
+		.actions :global(.button[data-variant='quiet']) {
+			background-color: transparent;
+			color: var(--ink-quiet);
+		}
+
+		.actions :global(.button[data-variant='quiet']:hover:not(:disabled)) {
+			background-color: var(--chip-bg);
+			color: var(--ink);
+		}
+
+		kbd {
+			font-family: var(--ff-mono);
+			font-size: var(--fs-0);
+			opacity: 0.7;
+		}
+
+		@media (max-width: 40rem) {
+			.quiet-actions {
+				margin-inline-start: 0;
+			}
+			.scope {
+				margin-inline-start: 0;
+				text-align: start;
+			}
 		}
 	}
 </style>

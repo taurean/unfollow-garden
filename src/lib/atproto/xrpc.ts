@@ -33,6 +33,40 @@ function retryDelay(response: Response): number {
 
 const MAX_RETRIES = 4;
 
+/**
+ * Whether any request is currently sleeping off a rate limit.
+ *
+ * A scan that hits the AppView's limit simply stops producing results, which
+ * from the outside is indistinguishable from a hang. The loading indicator has
+ * to be able to say "waiting", and this is the only place that knows.
+ */
+type RateLimitListener = (waiting: boolean) => void;
+
+const rateLimitListeners = new Set<RateLimitListener>();
+let waiting = 0;
+
+export function onRateLimitWait(listener: RateLimitListener): () => void {
+	rateLimitListeners.add(listener);
+	listener(waiting > 0);
+	return () => rateLimitListeners.delete(listener);
+}
+
+function notifyWaiting(): void {
+	for (const listener of rateLimitListeners) listener(waiting > 0);
+}
+
+/** Sleep out a rate limit, telling anyone watching that we are stalled. */
+async function waitOutRateLimit(response: Response): Promise<void> {
+	waiting++;
+	if (waiting === 1) notifyWaiting();
+	try {
+		await new Promise((resolve) => setTimeout(resolve, retryDelay(response)));
+	} finally {
+		waiting--;
+		if (waiting === 0) notifyWaiting();
+	}
+}
+
 async function request(url: string, init: RequestInit, endpoint: string): Promise<unknown> {
 	for (let attempt = 0; ; attempt++) {
 		let response: Response;
@@ -46,7 +80,7 @@ async function request(url: string, init: RequestInit, endpoint: string): Promis
 		}
 
 		if (response.status === 429 && attempt < MAX_RETRIES) {
-			await new Promise((resolve) => setTimeout(resolve, retryDelay(response)));
+			await waitOutRateLimit(response);
 			continue;
 		}
 

@@ -1,0 +1,80 @@
+/*
+ * Project semantic tokens.
+ *
+ * stylebase ships `--hue-z0-bg`, `--hue-z0-fg`, and `--hue-z0-divider`, which
+ * is the whole of its semantic surface. This app needs a few more meanings —
+ * quiet ink, the two strip states, and the keep/unfollow pair — so they are
+ * named once here rather than picked per component. Every value resolves to a
+ * stylebase primitive; none is a raw colour.
+ *
+ * The values come from `static/mockup.png`, which is the visual contract.
+ * Two deliberate departures from it, both for the PRD's WCAG AA quality floor:
+ * quiet ink is slate-600 rather than the mockup's lighter blue-grey, and keep
+ * is green-700 rather than green-600, so white sits on it at 5:1.
+ *
+ * Declared in the `token` layer so stylebase's own defaults still win where it
+ * has an opinion, and so nothing here is an accidental override.
+ */
+@layer token {
+	:root {
+		/*
+		 * Two surfaces, a single step apart. The recent columns sit on the
+		 * lighter one: they are the overflow, read only when the strip above
+		 * did not settle it, and a lighter ground reads as further back.
+		 */
+		--surface: var(--hue-neutral-100);
+		--surface-raised: var(--hue-z0-bg);
+
+		--ink: var(--hue-z0-fg);
+		/* Labels and captions: present, secondary, still legible at --fs-0. */
+		--ink-quiet: var(--hue-slate-600);
+
+		/* The timeline strip's two states. Nothing else uses these. */
+		--strip-empty: var(--hue-neutral-300);
+		--strip-active: var(--hue-blue-500);
+
+		/* Quiet chips: "follows you", media notes, shortcut keys. */
+		--chip-bg: var(--hue-slate-200);
+		--chip-ink: var(--hue-slate-700);
+
+		/*
+		 * Keep and unfollow. Told apart by hue, but never by hue alone — each
+		 * carries its own word and its own shortcut key (PRD, "Interface").
+		 */
+		--keep: var(--hue-green-700);
+		--keep-hover: var(--hue-green-800);
+		--unfollow: var(--hue-rose-800);
+		--unfollow-hover: var(--hue-rose-900);
+
+		--danger-ink: var(--hue-red-700);
+		--warn-ink: var(--hue-amber-700);
+
+		/* The widest the reading column gets before lines grow unwieldy. */
+		--stage-max: 78rem;
+	}
+
+	@media (prefers-color-scheme: dark) {
+		:root {
+			/* The same one-step relationship, inverted with the theme. */
+			--surface: var(--hue-neutral-950);
+			--surface-raised: var(--hue-neutral-900);
+
+			--ink-quiet: var(--hue-slate-400);
+
+			--strip-empty: var(--hue-neutral-800);
+			--strip-active: var(--hue-blue-400);
+
+			--chip-bg: var(--hue-slate-800);
+			--chip-ink: var(--hue-slate-300);
+
+			/*
+			 * Keep and unfollow do not change with the theme. At ~52% lightness
+			 * both fills read as saturated against either ground, and white
+			 * clears AA on both — a lighter dark-mode fill washed the label out.
+			 */
+
+			--danger-ink: var(--hue-red-400);
+			--warn-ink: var(--hue-amber-400);
+		}
+	}
+}

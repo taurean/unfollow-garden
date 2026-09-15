@@ -1,16 +1,21 @@
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { signIn, type Session } from '$lib/atproto/session';
-import { getProfiles, listFollows } from '$lib/atproto/graph';
+import { getFollowsOwner, getProfiles, listFollows } from '$lib/atproto/graph';
 import {
+	DEFAULT_SETTINGS,
 	loadDecisions,
 	loadFollows,
+	loadSettings,
 	saveDecision,
 	saveFollows,
+	saveSettings,
 	undoLast,
 	type Decision,
 	type DecisionRecord,
-	type FollowSnapshot
+	type FollowSnapshot,
+	type Settings
 } from '$lib/storage/db';
+import { ActivityScanner } from './scanner.svelte';
 
 export type Phase = 'signed-out' | 'signing-in' | 'loading' | 'triage' | 'done';
 
@@ -57,6 +62,18 @@ export class TriageSession {
 	progress = $state<Progress>({ step: '', loaded: 0, total: null });
 
 	subjects = $state<FollowSnapshot[]>([]);
+
+	/** Lookback and gap threshold, stored per owner. */
+	settings = $state<Settings>({ ownerDid: '', ...DEFAULT_SETTINGS });
+
+	/**
+	 * Activity loading, which runs behind the triage loop.
+	 *
+	 * Owned by the session rather than the screen so a subject's activity
+	 * survives the screen being swapped out from under it, and so the queue can
+	 * read what has loaded when it decides who is next.
+	 */
+	scanner = new ActivityScanner();
 
 	/**
 	 * Reactive collections rather than reassigned plain ones.
@@ -122,6 +139,26 @@ export class TriageSession {
 		}
 	}
 
+	/**
+	 * Change the lookback or the gap threshold.
+	 *
+	 * A new lookback restarts the scan, because it changes which events exist.
+	 * A new threshold does not, because it only decides which stretches are
+	 * long enough to name (PRD, "Metrics").
+	 */
+	async updateSettings(next: Partial<Omit<Settings, 'ownerDid'>>): Promise<void> {
+		const session = this.session;
+		if (!session) return;
+
+		const previous = this.settings;
+		this.settings = { ...previous, ...next, ownerDid: session.did };
+		await saveSettings($state.snapshot(this.settings));
+
+		if (this.settings.lookbackDays !== previous.lookbackDays) {
+			this.scanner.start(this.subjects, this.settings.lookbackDays);
+		}
+	}
+
 	signOut(): void {
 		storeSession(null);
 		this.session = null;
@@ -143,6 +180,8 @@ export class TriageSession {
 		this.error = null;
 
 		try {
+			this.settings = await loadSettings(session.did);
+
 			this.decisions.clear();
 			for (const [subjectDid, record] of await loadDecisions(session.did)) {
 				this.decisions.set(subjectDid, record);
@@ -162,10 +201,29 @@ export class TriageSession {
 					this.progress = { step: 'Loading profiles', loaded, total: subjectDids.length };
 				});
 
-				subjects = await saveFollows(session.did, follows, profiles);
+				this.progress = {
+					step: 'Checking who follows you back',
+					loaded: 0,
+					total: subjectDids.length
+				};
+				// Follow-back status is a nice-to-have on the card, not a reason
+				// to fail a load that already has every profile.
+				const followsOwner = await getFollowsOwner(session.did, subjectDids, (loaded) => {
+					this.progress = {
+						step: 'Checking who follows you back',
+						loaded,
+						total: subjectDids.length
+					};
+					// An empty result is passed straight to saveFollows and never
+					// held in reactive state.
+					// eslint-disable-next-line svelte/prefer-svelte-reactivity
+				}).catch(() => new Map<string, boolean>());
+
+				subjects = await saveFollows(session.did, follows, profiles, followsOwner);
 			}
 
 			this.subjects = subjects;
+			this.scanner.start(subjects, this.settings.lookbackDays);
 			this.advance();
 		} catch (cause) {
 			this.error = cause instanceof Error ? cause.message : String(cause);
@@ -174,21 +232,42 @@ export class TriageSession {
 	}
 
 	/**
-	 * Put the next undecided subject on screen.
+	 * Where a subject sits in the queue, lowest first (PRD, TRI-2).
 	 *
-	 * v0 ordering: subjects with no profile first — they are unavailable
-	 * accounts, the easiest calls to make and the ones a flat follow list hides
-	 * — then oldest follows first. Ordering by inactivity arrives with activity
-	 * loading in slice 2 (PRD, TRI-2).
+	 * 0 — unavailable, or activity failed to load. The easiest calls to make,
+	 *     and the ones a flat follow list buries.
+	 * 1 — loaded, and silent for the whole covered window.
+	 * 2 — loaded and active; ordered among themselves by how long ago.
+	 * 3 — not loaded yet. "Next" is chosen from what has loaded, so a subject
+	 *     the scan has not reached waits rather than jumping the queue on the
+	 *     strength of knowing nothing about them.
 	 */
+	private rank(subject: FollowSnapshot): number {
+		if (!subject.profile) return 0;
+		const state = this.scanner.get(subject.subjectDid);
+		if (state.status === 'error') return 0;
+		if (state.status !== 'ready') return 3;
+		return state.lastActive === null ? 1 : 2;
+	}
+
+	/** Put the next undecided subject on screen, least recently active first. */
 	advance(): void {
 		const next = [...this.remaining].sort((a, b) => {
-			if (!a.profile !== !b.profile) return a.profile ? 1 : -1;
+			const byRank = this.rank(a) - this.rank(b);
+			if (byRank !== 0) return byRank;
+
+			const aLast = this.scanner.get(a.subjectDid).lastActive;
+			const bLast = this.scanner.get(b.subjectDid).lastActive;
+			if (aLast && bLast) return aLast.localeCompare(bLast);
+
+			// Within a rank where neither has a last-active date, the oldest
+			// follow goes first: it is the one most likely to have drifted.
 			return (a.followedAt ?? '').localeCompare(b.followedAt ?? '');
 		})[0];
 
 		this.current = next ?? null;
 		this.phase = next ? 'triage' : 'done';
+		if (next) this.scanner.prioritize(next.subjectDid);
 	}
 
 	/** Defer the subject on screen to the end of this sitting. */

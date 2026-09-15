@@ -15,7 +15,7 @@
 	});
 </script>
 
-<main class="l:root">
+<main>
 	{#if session.phase === 'signed-out' || session.phase === 'signing-in'}
 		<SignIn
 			busy={session.phase === 'signing-in'}
@@ -39,55 +39,38 @@
 				<Button onclick={() => session.reviewSkipped()}>
 					Review {session.skippedCount.toLocaleString()} skipped
 				</Button>
-			{:else}
-				<p class="note u:fs-1">
-					Nothing has been unfollowed. Review and runs arrive in the next slice.
-				</p>
 			{/if}
-			<Button class="action--quiet" onclick={() => session.signOut()}>Sign out</Button>
+			<Button data-variant="quiet" onclick={() => session.signOut()}>Sign out</Button>
 		</section>
 	{/if}
 </main>
 
 <style>
-	.done {
-		display: flex;
-		flex-direction: column;
-		align-items: flex-start;
-		gap: var(--space-sm);
-		max-width: 40rem;
-		margin-inline: auto;
-		padding-block: var(--space-3xl);
-	}
-
-	h1 {
-		font-family: var(--ff-heading);
-		margin: 0;
-	}
-
-	p {
-		margin: 0;
-		font-variant-numeric: tabular-nums;
-	}
-
-	.note {
-		color: var(--hue-slate-600);
-	}
-
-	.done :global(.action--quiet) {
-		background-color: transparent;
-		color: var(--hue-slate-700);
-		border: 1px solid var(--hue-slate-300);
-		margin-block-start: var(--space-lg);
-	}
-
-	@media (prefers-color-scheme: dark) {
-		.note {
-			color: var(--hue-slate-400);
+	@layer layout {
+		.done {
+			display: flex;
+			flex-direction: column;
+			align-items: flex-start;
+			gap: var(--space-sm);
+			max-inline-size: 40rem;
+			margin-inline: auto;
+			padding: var(--space-4xl) var(--space-lg);
 		}
-		.done :global(.action--quiet) {
-			color: var(--hue-slate-300);
-			border-color: var(--hue-slate-700);
+
+		h1 {
+			margin: 0;
+		}
+
+		p {
+			margin: 0;
+			font-variant-numeric: tabular-nums;
+		}
+
+		.done :global(.button[data-variant='quiet']) {
+			background-color: transparent;
+			color: var(--ink-quiet);
+			border: 1px solid var(--hue-z0-divider);
+			margin-block-start: var(--space-lg);
 		}
 	}
 </style>

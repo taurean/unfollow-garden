@@ -22,6 +22,14 @@ export interface Profile {
 	followersCount?: number;
 	followsCount?: number;
 	postsCount?: number;
+	/**
+	 * When the account was created, per the AppView.
+	 *
+	 * Used to stop the activity window reaching back before the account
+	 * existed, which would otherwise report a young account as having an
+	 * eleven-month silence.
+	 */
+	createdAt?: string;
 }
 
 interface ListRecordsResponse {
@@ -108,4 +116,45 @@ export async function getProfiles(
 	}
 
 	return profiles;
+}
+
+/** The AppView takes at most 30 actors per `getRelationships` call. */
+const RELATIONSHIP_BATCH = 30;
+
+interface RelationshipsResponse {
+	relationships: Array<{ did?: string; following?: string; followedBy?: string }>;
+}
+
+/**
+ * Which of these subjects follow the owner back.
+ *
+ * A DID missing from the result is absent rather than false: the AppView
+ * returns nothing for accounts it cannot see, and "we do not know" is a
+ * different claim from "they do not follow you" on a screen where the answer
+ * changes someone's mind.
+ */
+export async function getFollowsOwner(
+	ownerDid: string,
+	subjectDids: string[],
+	onProgress?: (loaded: number) => void
+): Promise<Map<string, boolean>> {
+	const result = new Map<string, boolean>();
+	const unique = [...new Set(subjectDids)];
+
+	for (let i = 0; i < unique.length; i += RELATIONSHIP_BATCH) {
+		const batch = unique.slice(i, i + RELATIONSHIP_BATCH);
+		const page = await query<RelationshipsResponse>(APPVIEW, 'app.bsky.graph.getRelationships', {
+			actor: ownerDid,
+			others: batch
+		});
+		for (const relationship of page.relationships) {
+			if (!relationship.did) continue;
+			// `followedBy` is set from the owner's point of view: the other
+			// account follows the owner.
+			result.set(relationship.did, Boolean(relationship.followedBy));
+		}
+		onProgress?.(result.size);
+	}
+
+	return result;
 }

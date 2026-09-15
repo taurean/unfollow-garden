@@ -9,6 +9,7 @@ const subject: FollowSnapshot = {
 	subjectDid: 'did:plc:alice',
 	rkeys: ['aaa'],
 	followedAt: '2021-06-04T00:00:00Z',
+	followsOwner: null,
 	loadedAt: '2026-09-11T00:00:00Z',
 	profile: { did: 'did:plc:alice', handle: 'alice.test', displayName: 'Alice' }
 };
