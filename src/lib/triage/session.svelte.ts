@@ -2,7 +2,16 @@ import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { signIn, type Session } from '$lib/atproto/session';
 import { getFollowsOwner, getProfiles, listFollows } from '$lib/atproto/graph';
 import {
+	exportOwner,
+	importOwner,
+	requestPersistence,
+	type ImportReport
+} from '$lib/storage/backup';
+import {
 	DEFAULT_SETTINGS,
+	deleteOwnerData,
+	loadRuns,
+	type RunRecord,
 	loadDecisions,
 	loadFollows,
 	loadSettings,
@@ -16,8 +25,20 @@ import {
 	type Settings
 } from '$lib/storage/db';
 import { ActivityScanner } from './scanner.svelte';
+import { RunController } from './runs.svelte';
 
-export type Phase = 'signed-out' | 'signing-in' | 'loading' | 'triage' | 'done';
+export type Phase =
+	| 'signed-out'
+	| 'signing-in'
+	| 'loading'
+	| 'triage'
+	| 'done'
+	/** Reviewing the marked list before anything is deleted (PRD, RUN-1). */
+	| 'review'
+	/** A run is in flight, or has just finished. */
+	| 'running'
+	/** Settings, past runs, backup, and delete-all. */
+	| 'settings';
 
 /**
  * Where the session token lives.
@@ -75,6 +96,26 @@ export class TriageSession {
 	 */
 	scanner = new ActivityScanner();
 
+	/** Unfollow runs. Separate from triage because a run outlives the queue. */
+	runs = new RunController();
+
+	/** Past runs, loaded when the settings screen opens. */
+	pastRuns = $state<RunRecord[]>([]);
+
+	/**
+	 * Whether the browser has promised not to evict this origin's storage.
+	 *
+	 * Null means the browser does not offer the guarantee at all, which is a
+	 * different answer from "no" and is the case export exists for (STORE-2).
+	 */
+	persisted = $state<boolean | null>(null);
+
+	/** What the last import did, so the user is told rather than left guessing. */
+	importReport = $state<ImportReport | null>(null);
+
+	/** The phase to return to when settings closes. */
+	private phaseBeforeSettings: Phase = 'triage';
+
 	/**
 	 * Reactive collections rather than reassigned plain ones.
 	 *
@@ -110,6 +151,17 @@ export class TriageSession {
 	skippedCount = $derived(this.undecided.filter((s) => this.skipped.has(s.subjectDid)).length);
 	keptCount = $derived(this.countOf('keep'));
 	markedCount = $derived(this.countOf('unfollow'));
+
+	/**
+	 * The subjects a run would act on.
+	 *
+	 * Read from the decision map rather than kept as its own list, so a keep
+	 * recorded on the review screen removes the subject here without a second
+	 * place to forget to update.
+	 */
+	marked = $derived(
+		this.subjects.filter((s) => this.decisions.get(s.subjectDid)?.decision === 'unfollow')
+	);
 
 	private countOf(decision: Decision): number {
 		let total = 0;
@@ -224,6 +276,11 @@ export class TriageSession {
 
 			this.subjects = subjects;
 			this.scanner.start(subjects, this.settings.lookbackDays);
+
+			// An unfinished run outranks the queue: it already deleted records,
+			// and leaving it half-done is the one state the user cannot see.
+			await this.runs.findUnfinished(session.did);
+
 			this.advance();
 		} catch (cause) {
 			this.error = cause instanceof Error ? cause.message : String(cause);
@@ -284,6 +341,133 @@ export class TriageSession {
 		this.advance();
 	}
 
+	async openSettings(): Promise<void> {
+		const session = this.session;
+		if (!session) return;
+		this.phaseBeforeSettings = this.phase === 'settings' ? 'triage' : this.phase;
+		this.phase = 'settings';
+		this.pastRuns = await loadRuns(session.did);
+		this.persisted = await requestPersistence();
+	}
+
+	closeSettings(): void {
+		this.error = null;
+		this.importReport = null;
+		this.phase = this.phaseBeforeSettings;
+	}
+
+	/** The backup file's contents, for the user to save wherever they keep things. */
+	async exportData(): Promise<string> {
+		const session = this.session;
+		if (!session) return '';
+		return JSON.stringify(await exportOwner(session.did), null, 2);
+	}
+
+	/** Merge a backup back in, then reload what the screens read. */
+	async importData(json: string): Promise<void> {
+		const session = this.session;
+		if (!session) return;
+		this.error = null;
+		this.importReport = null;
+		try {
+			this.importReport = await importOwner(json, session.did);
+			await this.refreshDecisions();
+			this.pastRuns = await loadRuns(session.did);
+		} catch (cause) {
+			this.error = cause instanceof Error ? cause.message : String(cause);
+		}
+	}
+
+	/**
+	 * Delete everything stored for this owner and start over.
+	 *
+	 * The caller confirms first (STORE-4). Nothing here is recoverable and none
+	 * of it exists anywhere else, which is the whole point of the app.
+	 */
+	async deleteAllData(): Promise<void> {
+		const session = this.session;
+		if (!session) return;
+		await deleteOwnerData(session.did);
+		this.decisions.clear();
+		this.skipped.clear();
+		this.pastRuns = [];
+		this.runs.unfinished = null;
+		this.settings = { ownerDid: session.did, ...DEFAULT_SETTINGS };
+		this.advance();
+	}
+
+	/** Follow every account a past run unfollowed (PRD, RESTORE-1). */
+	async restoreRun(run: RunRecord): Promise<void> {
+		const session = this.session;
+		if (!session) return;
+
+		const subjectDids = run.targets.map((target) => target.subjectDid);
+		await this.runs.restore(session, run, subjectDids, (next) => {
+			this.session = next;
+			storeSession(next);
+		});
+		await this.refreshDecisions();
+	}
+
+	/** Show the marked list, which is the last stop before anything is deleted. */
+	review(): void {
+		this.phase = 'review';
+	}
+
+	/** Leave the review screen for whatever is left to decide. */
+	backToTriage(): void {
+		this.advance();
+	}
+
+	/**
+	 * Take a subject off the unfollow list from the review screen.
+	 *
+	 * The full undo stack is not involved: this is a correction made while
+	 * looking at the list, not a decision being walked back one at a time.
+	 */
+	async keepInstead(subjectDid: string): Promise<void> {
+		const session = this.session;
+		if (!session) return;
+		const record = await saveDecision(session.did, subjectDid, 'keep');
+		this.decisions.set(subjectDid, record);
+	}
+
+	/** Delete the follow records for every marked subject. */
+	async startRun(): Promise<void> {
+		const session = this.session;
+		if (!session) return;
+
+		this.phase = 'running';
+		await this.runs.startUnfollow(session, $state.snapshot(this.marked), (next) => {
+			this.session = next;
+			storeSession(next);
+		});
+		await this.refreshDecisions();
+	}
+
+	/** Pick up a run that was interrupted by a closed tab or a dead network. */
+	async resumeRun(): Promise<void> {
+		const session = this.session;
+		if (!session) return;
+
+		this.phase = 'running';
+		await this.runs.resume(session, (next) => {
+			this.session = next;
+			storeSession(next);
+		});
+		await this.refreshDecisions();
+	}
+
+	/** Re-read decisions after a run has written `unfollowed` behind the UI's back. */
+	private async refreshDecisions(): Promise<void> {
+		const session = this.session;
+		if (!session) return;
+		this.decisions.clear();
+		for (const [subjectDid, record] of await loadDecisions(session.did)) {
+			this.decisions.set(subjectDid, record);
+		}
+	}
+
 	/**
 	 * Record a decision about the subject on screen, then move on.
 	 *
@@ -300,6 +484,13 @@ export class TriageSession {
 			const record = await saveDecision(session.did, subject.subjectDid, decision);
 			this.decisions.set(subject.subjectDid, record);
 			this.error = null;
+
+			// Asked once, after the first decision: before that there is nothing
+			// to lose, and a permission prompt with nothing behind it is noise.
+			if (this.persisted === null && this.decisions.size === 1) {
+				this.persisted = await requestPersistence();
+			}
+
 			this.advance();
 		} catch (cause) {
 			this.error = `Could not save that decision: ${cause instanceof Error ? cause.message : String(cause)}`;

@@ -2,8 +2,12 @@
 @import './lib/styles/tokens.css';
 
 @layer default {
+	html,
 	body {
 		background-color: var(--surface);
+	}
+
+	body {
 		color: var(--ink);
 		/*
 		 * One typeface, chosen for legibility at small sizes (PRD,

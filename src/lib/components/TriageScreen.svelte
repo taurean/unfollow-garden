@@ -57,7 +57,17 @@
 			{#if session.skippedCount > 0}
 				· {exact(session.skippedCount)} skipped
 			{/if}
-			· {exact(session.keptCount)} kept · {exact(session.markedCount)} marked
+			· {exact(session.keptCount)} kept ·
+			{#if session.markedCount > 0}
+				<!-- Reachable mid-queue, not only at the end: a few thousand
+				     accounts is several sittings, and a run should not have to
+				     wait for the last one. -->
+				<Button data-variant="link" onclick={() => session.review()}>
+					{exact(session.markedCount)} marked
+				</Button>
+			{:else}
+				{exact(session.markedCount)} marked
+			{/if}
 		</p>
 
 		<p role="status">
@@ -135,6 +145,21 @@
 
 		.status p {
 			margin: 0;
+		}
+
+		/* An inline text link, not a control: it sits inside a sentence. */
+		.status :global(.button[data-variant='link']) {
+			display: inline;
+			background: transparent;
+			color: inherit;
+			font: inherit;
+			padding: 0;
+			text-decoration: underline;
+			text-underline-offset: 0.2em;
+		}
+
+		.status :global(.button[data-variant='link']:hover) {
+			color: var(--ink);
 		}
 
 		.error {
