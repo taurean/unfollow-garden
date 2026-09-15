@@ -22,8 +22,22 @@
 	 *
 	 * Illustrative, not an allowlist: nothing in the app reads this, and a
 	 * service absent from it signs in exactly the same way.
+	 *
+	 * Each carries its real handle domain rather than a `name.social` pattern,
+	 * so the example someone reads is one they could actually type. Blacksky
+	 * appears twice on purpose — one service can hand out more than one domain,
+	 * and a list that hid that would be teaching the wrong shape again.
 	 */
-	const SERVICES = ['Blacksky', 'Eurosky', 'Bluesky', 'Spark', 'Selfhosted', 'Margin', 'Pckt'];
+	const SERVICES: ReadonlyArray<{ name: string; domain: string }> = [
+		{ name: 'Bluesky', domain: 'bsky.social' },
+		{ name: 'Blacksky', domain: 'blacksky.app' },
+		{ name: 'Eurosky', domain: 'eurosky.social' },
+		{ name: 'Spark', domain: 'sprk.so' },
+		{ name: 'Margin', domain: 'margin.cafe' },
+		{ name: 'Blacksky', domain: 'myatproto.social' },
+		{ name: 'Pckt', domain: 'pckt.cafe' },
+		{ name: 'Selfhosted', domain: 'selfhosted.social' }
+	];
 
 	const ROTATE_MS = 2600;
 
@@ -52,8 +66,8 @@
 	});
 
 	const service = $derived(rotating ? SERVICES[index % SERVICES.length] : null);
-	const label = $derived(service ? `${service} username` : 'Username');
-	const ghost = $derived(service ? `you.${service.toLowerCase()}.social` : 'you.example.social');
+	const label = $derived(service ? `${service.name} username` : 'Username');
+	const ghost = $derived(service ? `you.${service.domain}` : 'you.example.social');
 </script>
 
 <section class="sign-in">

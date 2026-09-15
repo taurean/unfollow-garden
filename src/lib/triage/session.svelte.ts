@@ -245,9 +245,23 @@ export class TriageSession {
 		this.decisions.clear();
 		this.skipped.clear();
 		this.current = null;
+		this.error = null;
 		this.phase = 'signed-out';
 
-		if (client && did) await signOutOwner(client, did);
+		if (!client || !did) return;
+
+		try {
+			await signOutOwner(client, did);
+		} catch (cause) {
+			// The screen already says signed out, and the local state is gone. But
+			// a revoke that did not reach the server may leave the grant live, and
+			// silently looking signed out while still being authorized is the one
+			// version of this the user must not be left with.
+			this.error =
+				`Signed out here, but your server could not be reached to revoke the ` +
+				`session: ${cause instanceof Error ? cause.message : String(cause)}. ` +
+				`Revoke it from your account settings if that matters to you.`;
+		}
 	}
 
 	/**
