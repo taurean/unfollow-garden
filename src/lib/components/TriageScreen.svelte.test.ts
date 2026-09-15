@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import TriageScreen from './TriageScreen.svelte';
 import { TriageSession } from '$lib/triage/session.svelte';
+import { intentOf } from '$lib/triage/swipe';
 import type { FollowSnapshot } from '$lib/storage/db';
 
 const subject: FollowSnapshot = {
@@ -168,5 +169,36 @@ describe('swipe triage', () => {
 		await drag(card, 30, 0);
 
 		expect(session.decide).not.toHaveBeenCalled();
+	});
+});
+
+describe('the buttons and the gesture as one vocabulary', () => {
+	/*
+	 * The invariant, asserted against the gesture rules themselves rather than
+	 * against a hardcoded order.
+	 *
+	 * These drifted apart once already: keep sat on the left while a leftward
+	 * swipe unfollowed, so anyone who learned the gesture and then reached for
+	 * a button got the opposite of what they meant. Reading the expected label
+	 * out of `intentOf` means changing either side without the other fails
+	 * here, which is the only way the two stay one vocabulary.
+	 */
+	const swipe = (dx: number) => intentOf({ dx, dy: 0, width: 400, downArmed: false });
+
+	it('puts each decision button on the side its own swipe travels', async () => {
+		const screen = render(TriageScreen, { session });
+		const [left, right] = [
+			...screen.baseElement.querySelectorAll('.decisions .button')
+		] as HTMLElement[];
+
+		expect(left.textContent?.toLowerCase()).toContain(swipe(-200));
+		expect(right.textContent?.toLowerCase()).toContain(swipe(200));
+	});
+
+	it('describes the gesture in the order the buttons sit in', async () => {
+		const screen = render(TriageScreen, { session });
+		const hint = screen.baseElement.querySelector('.hint')!.textContent!.toLowerCase();
+
+		expect(hint.indexOf(swipe(-200)!)).toBeLessThan(hint.indexOf(swipe(200)!));
 	});
 });

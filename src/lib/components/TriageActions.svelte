@@ -24,12 +24,22 @@
 </script>
 
 <div class="actions">
+	<!--
+		Unfollow sits on the left and keep on the right, because that is where
+		their swipes go.
+
+		The other order reads more naturally as a sentence — the safe option
+		first — and it is wrong here: someone who has learned the gesture and
+		then reaches for a button finds the left one doing the opposite of a
+		left swipe. The buttons and the gesture are one vocabulary, so the
+		spatial half has to agree.
+	-->
 	<div class="decisions">
-		<Button data-variant="keep" onclick={() => oncommit('keep')}>
-			Keep <kbd>K</kbd>
-		</Button>
 		<Button data-variant="unfollow" onclick={() => oncommit('unfollow')}>
 			Unfollow <kbd>U</kbd>
+		</Button>
+		<Button data-variant="keep" onclick={() => oncommit('keep')}>
+			Keep <kbd>K</kbd>
 		</Button>
 	</div>
 
@@ -59,7 +69,7 @@
 		alternatives, and hiding this would hide the only description of the
 		gesture from someone who can perform it but cannot see the card move.
 	-->
-	<p class="hint u:fs-0">swipe right to keep · left to unfollow · down to skip</p>
+	<p class="hint u:fs-0">swipe left to unfollow · right to keep · down to skip</p>
 </div>
 
 <style>

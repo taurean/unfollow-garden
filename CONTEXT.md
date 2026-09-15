@@ -259,6 +259,26 @@ The gesture's rules are pure functions over a plain geometry object, so they
 are tested without synthesising pointer events. Anything that decides what a
 drag _means_ belongs there rather than in the component.
 
+## The buttons and the gesture are one vocabulary
+
+Unfollow sits on the **left** of the action bar and keep on the **right**,
+because that is the direction each one's swipe travels. Skip is down, and has
+no side.
+
+The other order is the tempting one — safe option first, and it reads better as
+a sentence — and it shipped that way for a day. It is wrong: someone who learns
+the gesture and then reaches for a button finds the left button doing the
+opposite of a left swipe. Two ways to express one decision must not disagree
+about where that decision lives in space.
+
+The swipe direction itself is the fixed point, and the buttons follow it.
+Right-for-yes is the convention people already have, and the destructive
+direction is not the one to make them unlearn.
+
+`TriageScreen.svelte.test.ts` asserts this by reading the expected label out of
+`intentOf` rather than hardcoding an order, so changing either side without the
+other fails.
+
 ## Undo means the last thing you did, and a skip is not on the stack
 
 `undoLast` pops the IndexedDB undo stack, which only ever holds decisions.
