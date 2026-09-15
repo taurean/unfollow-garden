@@ -1,0 +1,41 @@
+/*
+ * Project composition utilities.
+ *
+ * stylebase's `layout` layer covers the general shapes — `l:root`, `l:grid`,
+ * `l:repel`, `l:waterfall`. This file holds the one composition this app needs
+ * that a general library could not know about: a reading column that leaves
+ * room for the wordmark tab on the viewport's edge.
+ *
+ * It is here rather than in six `<style>` blocks because it encodes a fact
+ * about the *page*, not about any screen: the wordmark is fixed to the left
+ * edge above 40rem and is a static band below it. Every screen was repeating
+ * that gutter, and every screen was forgetting to take it back on a phone —
+ * which left a 50px empty column on the narrowest screens, reserved for a tab
+ * that had already moved.
+ */
+@layer layout {
+	/*
+	 * The reading column.
+	 *
+	 * Width is `--stage-width`, so a screen sets its own ceiling without
+	 * restating the centring or the gutter. Block padding is `--stage-leading`
+	 * and `--stage-trailing` for the same reason.
+	 */
+	.l\:stage {
+		max-inline-size: var(--stage-width, var(--stage-max));
+		margin-inline: auto;
+
+		padding-block: var(--stage-leading, var(--space-2xl)) var(--stage-trailing, var(--space-3xl));
+
+		/* Start gutter clears the wordmark tab; end gutter is an ordinary margin. */
+		padding-inline: var(--space-2xl) var(--space-lg);
+	}
+
+	/* phone — see the breakpoint note in tokens.css */
+	@media (max-width: 40rem) {
+		.l\:stage {
+			/* The wordmark is a band across the top here, so it needs no column. */
+			padding-inline: var(--space-lg);
+		}
+	}
+}
