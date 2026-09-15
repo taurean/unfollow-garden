@@ -1,4 +1,4 @@
-import type { Session } from '$lib/atproto/session';
+import type { OwnerSession } from '$lib/atproto/oauth';
 import { createFollows, currentFollowRkeys, deleteFollows } from '$lib/atproto/writes';
 import {
 	forgetUndo,
@@ -49,11 +49,7 @@ export class RunController {
 	 * no record left to delete, and one followed again has a different rkey.
 	 * Getting this wrong fails the batch rather than the subject.
 	 */
-	async startUnfollow(
-		session: Session,
-		subjects: FollowSnapshot[],
-		onSession: (session: Session) => void
-	): Promise<void> {
+	async startUnfollow(session: OwnerSession, subjects: FollowSnapshot[]): Promise<void> {
 		this.busy = true;
 		this.error = null;
 
@@ -89,7 +85,7 @@ export class RunController {
 			await saveRun($state.snapshot(run));
 			this.run = run;
 
-			await this.#execute(session, run, onSession);
+			await this.#execute(session, run);
 		} catch (cause) {
 			this.error = cause instanceof Error ? cause.message : String(cause);
 			this.busy = false;
@@ -102,7 +98,7 @@ export class RunController {
 	 * The repo is re-read first, so records already deleted before the
 	 * interruption are recognised rather than deleted again.
 	 */
-	async resume(session: Session, onSession: (session: Session) => void): Promise<void> {
+	async resume(session: OwnerSession): Promise<void> {
 		const run = this.unfinished;
 		if (!run) return;
 
@@ -126,7 +122,7 @@ export class RunController {
 			this.run = run;
 			this.unfinished = null;
 
-			await this.#execute(session, run, onSession);
+			await this.#execute(session, run);
 		} catch (cause) {
 			this.error = cause instanceof Error ? cause.message : String(cause);
 			this.busy = false;
@@ -140,20 +136,14 @@ export class RunController {
 	 * follow dates are gone and the subjects are notified. The screen says both
 	 * before this is reachable (PRD, RESTORE-1).
 	 */
-	async restore(
-		session: Session,
-		run: RunRecord,
-		subjectDids: string[],
-		onSession: (session: Session) => void
-	): Promise<void> {
+	async restore(session: OwnerSession, run: RunRecord, subjectDids: string[]): Promise<void> {
 		this.busy = true;
 		this.error = null;
 		this.done = 0;
 		this.total = subjectDids.length;
 
 		try {
-			await createFollows(session, subjectDids, async (batch, current) => {
-				onSession(current);
+			await createFollows(session, subjectDids, async (batch) => {
 				this.done += batch.length;
 				for (const subjectDid of batch) await markDecided(run.ownerDid, subjectDid, 'keep');
 			});
@@ -165,11 +155,7 @@ export class RunController {
 	}
 
 	/** Delete every pending target's records, writing progress as it goes. */
-	async #execute(
-		session: Session,
-		run: RunRecord,
-		onSession: (session: Session) => void
-	): Promise<void> {
+	async #execute(session: OwnerSession, run: RunRecord): Promise<void> {
 		// Targets that were already gone still get their decision recorded, so
 		// the queue and the counts agree with the repo.
 		for (const target of run.targets) {
@@ -197,8 +183,7 @@ export class RunController {
 			// eslint-disable-next-line svelte/prefer-svelte-reactivity
 			const removed = new Set<string>();
 
-			await deleteFollows(session, rkeys, async (batch, current) => {
-				onSession(current);
+			await deleteFollows(session, rkeys, async (batch) => {
 				for (const rkey of batch) removed.add(rkey);
 				this.done += batch.length;
 

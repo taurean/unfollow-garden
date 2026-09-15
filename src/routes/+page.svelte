@@ -24,7 +24,7 @@
 		<SignIn
 			busy={session.phase === 'signing-in'}
 			error={session.error}
-			onSignIn={(handle, appPassword) => session.signIn(handle, appPassword)}
+			onSignIn={(handle) => session.signIn(handle)}
 		/>
 	{:else if session.phase === 'loading'}
 		<LoadingScreen progress={session.progress} />

@@ -6,13 +6,12 @@
 		busy = false,
 		error = null
 	}: {
-		onSignIn: (handle: string, appPassword: string) => void;
+		onSignIn: (handle: string) => void;
 		busy?: boolean;
 		error?: string | null;
 	} = $props();
 
 	let handle = $state('');
-	let appPassword = $state('');
 </script>
 
 <section class="sign-in">
@@ -26,7 +25,7 @@
 	<form
 		onsubmit={(event) => {
 			event.preventDefault();
-			onSignIn(handle, appPassword);
+			onSignIn(handle);
 		}}
 	>
 		<label for="handle">Handle</label>
@@ -40,26 +39,18 @@
 			disabled={busy}
 		/>
 
-		<label for="app-password">App password</label>
-		<input
-			id="app-password"
-			name="app-password"
-			type="password"
-			autocomplete="current-password"
-			placeholder="xxxx-xxxx-xxxx-xxxx"
-			bind:value={appPassword}
-			disabled={busy}
-		/>
-		<p class="hint u:fs-0">
-			Create one at Settings → Privacy and security → App passwords. It is used once to sign in and
-			is never stored.
+		<p class="hint u:fs-0 u:lh-standard">
+			You sign in on your own server, not here — this app never sees a password. It asks for one
+			permission: to add and remove follows. It cannot read your messages or post as you.
 		</p>
 
 		{#if error}
 			<p class="error u:fs-1" role="alert">{error}</p>
 		{/if}
 
-		<Button type="submit" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</Button>
+		<Button type="submit" disabled={busy}>
+			{busy ? 'Redirecting…' : 'Sign in with Bluesky'}
+		</Button>
 	</form>
 </section>
 

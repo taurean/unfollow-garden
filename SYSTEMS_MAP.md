@@ -2,7 +2,7 @@
 
 This file exists so a reader can decide which small part of unfollow-garden is relevant to a task without opening anything else. Areas are divided by reason for change — parts that change for the same reason share an entry, even when they sit in different directories.
 
-The application is at v0 and feature-complete against `PRD.md` except for authentication: app-password sign-in, follow loading, activity loading and metrics, the triage loop, review, unfollow runs with resume, restore, backup, and settings — running locally with no deployment. `PRD.md` describes v1 and its five release slices; `PRD.md`, "Version 0" records where v0 deliberately differs. This file describes what exists today.
+The application is feature-complete against `PRD.md`: atproto OAuth sign-in, follow loading, activity loading and metrics, the triage loop, review, unfollow runs with resume, restore, backup, and settings. It is not yet deployed — the only thing standing between here and a deploy is choosing a hostname, since `client_id` is a URL that appears on the consent screen (PRD open question 3). This file describes what exists today.
 
 ## Layout
 
@@ -25,7 +25,8 @@ unfollow-garden/
 │   │   ├── atproto/
 │   │   │   ├── xrpc.ts        # fetch wrapper, 429 retry + wait signal, XrpcError
 │   │   │   ├── identity.ts    # handle → DID → PDS; the entryway special case
-│   │   │   ├── session.ts     # app-password sign-in and refresh
+│   │   │   ├── oauth.ts       # OAuth client, sign-in/restore/revoke, OwnerSession
+│   │   │   ├── client-config.ts    # the scope and the client metadata document
 │   │   │   ├── graph.ts       # follow records, profiles, follow-back status
 │   │   │   ├── activity.ts    # author feed, likes, events, covered window
 │   │   │   └── writes.ts      # the only authenticated writes: batched applyWrites
@@ -47,7 +48,8 @@ unfollow-garden/
 │   ├── routes/
 │   │   ├── +layout.ts         # ssr = false — the app is client-rendered
 │   │   ├── +layout.svelte     # shell: global styles, favicon, the wordmark tab
-│   │   └── +page.svelte       # the one route; routes on session phase
+│   │   ├── +page.svelte       # the one route; routes on session phase
+│   │   └── oauth-client-metadata.json/   # prerendered client metadata
 │   └── stories/               # Storybook stories
 ├── static/                    # files served as-is
 ├── .github/workflows/         # CI: decision-graph PNG cleanup on merge
@@ -66,11 +68,11 @@ unfollow-garden/
 
 ### Identity and authentication
 
-For: Turning a handle into an authenticated session against the right host.
-Lives at: `src/lib/atproto/identity.ts`, `src/lib/atproto/session.ts`, `src/lib/atproto/xrpc.ts`
-Why this shape: v0 authenticates with an app password, which is a deliberate and temporary deviation from the PRD — see `PRD.md`, "Version 0". Keeping identity, session, and transport in three small modules means v1 replaces `session.ts` and deletes one function from `identity.ts`, rather than unpicking auth from everything it touched.
-Seams: `signIn` is the only place a credential is handled, and the only thing v1 replaces. `pdsForLogin` is the seam between where a repo lives and where it authenticates. `xrpc.ts` is the single choke point for rate limiting and error shape, so 429 behaviour changes in one place.
-Fragile: **An app password grants full account access.** The app uses only follows, but the credential permits everything, which is why v0 is not deployed. Bluesky-hosted accounts must authenticate at the `bsky.social` entryway rather than the PDS in their DID document; getting this wrong fails as an authentication error that reads like a wrong password. Session tokens live in `sessionStorage` and die with the tab, on purpose.
+For: Proving who the owner is, and asking for the narrowest grant that lets the app do its job.
+Lives at: `src/lib/atproto/oauth.ts`, `src/lib/atproto/client-config.ts`, `src/routes/oauth-client-metadata.json/+server.ts`, `src/lib/atproto/identity.ts`, `src/lib/atproto/xrpc.ts`
+Why this shape: `client-config.ts` is free of browser imports so the prerendered metadata route and the browser client can share one definition of the scope — the alternative is two copies, and the one that drifts is the one on the consent screen. `oauth.ts` narrows the library's `OAuthSession` to an `OwnerSession` of four fields, so the queue, the runs, and their tests depend on that rather than on an OAuth implementation.
+Seams: `SCOPE` is the single definition of what this app may do. `OwnerSession.fetch` is the only authenticated call in the app. `createOAuthClient` is where the loopback and discoverable client forms diverge. `xrpc.ts` is the choke point for rate limiting and error shape, and has no way to send a credential at all.
+Fragile: **Development must run on `127.0.0.1`, not `localhost`** — RFC 8252 bans the `localhost` hostname in redirect URIs, and the failure reads as a broken callback. The client is built with `BrowserOAuthClient.load()`, never the constructor, which rejects any non-HTTPS `client_id` and so makes the loopback form impossible. `signOut` must `revoke`; clearing app state alone leaves tokens live in the library's store and the next load signs the user back in. The deployed build needs `PUBLIC_APP_ORIGIN` set, or the metadata declares the wrong `client_id` and the authorization server rejects it at sign-in.
 
 ### Activity and metrics
 
@@ -84,8 +86,8 @@ Fragile: **The covered window is the load-bearing idea.** Metrics count only eve
 
 For: The only part of the app that changes anything outside the browser.
 Lives at: `src/lib/atproto/writes.ts`, `src/lib/triage/runs.svelte.ts`, `src/lib/components/ReviewScreen.svelte`, `src/lib/components/RunScreen.svelte`
-Why this shape: Every read in the app is public and unauthenticated. Keeping the writes in one small module is what makes that claim checkable rather than a promise.
-Seams: `applyWrites` is the single choke point for batching and token refresh. `RunController.#execute` is where a batch's bookkeeping lands, and it lands before the next batch is sent.
+Why this shape: Every read in the app is public and unauthenticated. Keeping the writes in one small module is what makes that claim checkable rather than a promise — and it is the only code the OAuth grant is for.
+Seams: `applyWrites` is the single choke point for batching. Token refresh is not here at all: the OAuth session refreshes itself, which is why the run controller no longer threads a session back to its caller. `RunController.#execute` is where a batch's bookkeeping lands, and it lands before the next batch is sent.
 Fragile: A run's targets are re-read from the owner's repo at start and again on resume, never trusted from the follow snapshot — a stale rkey fails the whole batch. A subject with more than one follow record is not marked `unfollowed` until every one of them is gone. Run records are written through `$state.snapshot`; `resume` reads its run out of `$state`, so writing it directly throws `DataCloneError`.
 
 ### Triage state and storage

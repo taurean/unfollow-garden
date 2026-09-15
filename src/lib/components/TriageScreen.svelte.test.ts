@@ -21,9 +21,7 @@ function parkedSession() {
 		did: 'did:plc:owner',
 		handle: 'owner.test',
 		pds: 'https://pds.test',
-		loginService: 'https://pds.test',
-		accessJwt: 'access',
-		refreshJwt: 'refresh'
+		fetch: async () => new Response(null, { status: 200 })
 	};
 	session.subjects = [subject];
 	session.current = subject;

@@ -14,10 +14,10 @@ Decisions are stored in the browser so a review of a few thousand accounts can s
 
 A working prototype exists (see "Prototype findings"). This document defines the version to build on suede for long-term maintenance.
 
-**What is built today is v0, which deviates from this document on purpose.** It
-signs in with an app password instead of atproto OAuth, and it runs locally
-with no deployment. See "Version 0" below before implementing anything in
-"Authentication" or "Architecture on suede".
+**What is built today matches this document**, with one thing outstanding: the
+app is not deployed, because the production origin is unchosen (open question
+3). The v0 app-password stage is over — see "Version 0", kept as a record of
+what it cost and how it was left.
 
 ## Problem
 
@@ -250,9 +250,6 @@ Authenticated writes go through the OAuth session to the owner's PDS:
 
 ## Authentication
 
-> **Not yet built.** v0 uses app passwords; see "Version 0". Everything in this
-> section describes v1 and remains the plan.
-
 ### Decision: public browser OAuth client
 
 Use `@atproto/oauth-client-browser` as a public client that runs entirely in the browser.
@@ -411,9 +408,13 @@ Copy uses sentence case and names actions by what they do: "Unfollow 42 accounts
 
 ## Version 0: local build
 
-v0 exists to get the triage loop in front of a real follow list quickly. It is
-a stage of this product, not a separate one — the storage schema, the metric
-definitions, and the user stories are unchanged.
+**Closed.** v0 existed to get the triage loop in front of a real follow list
+quickly, before OAuth. It is kept here as a record rather than deleted, because
+the trade it made is the reason the scope discipline in "Authentication" is
+written the way it is.
+
+The storage schema, the metric definitions, and the user stories were unchanged
+throughout, which is what made leaving v0 an auth swap rather than a rewrite.
 
 ### What differs from the rest of this document
 
@@ -448,17 +449,25 @@ hosts do not authenticate anyone — `createSession` has to go to
 reads as a wrong password. OAuth removes this distinction, which is one of the
 reasons v1 moves to it. Implemented in `pdsForLogin` and unit tested.
 
-### Leaving v0
+### Leaving v0 — what actually happened
 
-v1 is reached by replacing the authentication module and restoring the
-deployment. Specifically: `src/lib/atproto/session.ts` gives way to an OAuth
-client and the `oauth-client-metadata.json` route returns; the Cloudflare
-adapter and the Content-Security-Policy return with it; and the entryway
-special case in `pdsForLogin` is deleted rather than carried forward.
+`src/lib/atproto/session.ts` was deleted and `src/lib/atproto/oauth.ts` took its
+place; `oauth-client-metadata.json` returned as a prerendered route reading
+`PUBLIC_APP_ORIGIN`; and the entryway special case in `pdsForLogin` was deleted
+rather than carried forward, along with the `procedure` helper and the
+`accessJwt` parameter in `xrpc.ts`, both of which had no remaining caller once
+writes moved to the session's DPoP fetch.
 
-Nothing else is expected to change. The storage schema is already the version 1
-schema in this document, including the stores v0 does not write yet, so v1 adds
-rows rather than a migration.
+Two things went differently from the plan above:
+
+- **The Cloudflare adapter did not return.** The app is still a static bundle,
+  which is all it ever needed to be. The Content-Security-Policy is therefore
+  still absent and still waiting on a deploy, whatever host that ends up being.
+- **Reading the owner's own follow records became unauthenticated.** It was an
+  authenticated read in v0 out of habit; `listRecords` is public, and leaving it
+  authenticated would have forced a wider scope for no gain.
+
+The storage schema needed no migration, as expected.
 
 ## Release slices
 
@@ -488,11 +497,22 @@ Each slice ships on its own and leaves the app usable.
 
 The prototype (SvelteKit, client-only, app-password auth) was exercised in a browser against mocked endpoints. The mocks covered queue order, keyboard triage, undo, duplicate follow records, a failing third-party PDS, and batched deletes. The metrics definitions above match its tested behavior.
 
-Not yet confirmed against the live network:
+Confirmed against the live network since:
+
+- **bsky.social accepts the granular scope.** A pushed authorization request
+  carrying `atproto repo:app.bsky.graph.follow?action=create&action=delete`
+  returns a `request_uri` and reaches the consent screen. The risk below about
+  granular-scope support is therefore not a Bluesky-hosted problem; it remains
+  open for older self-hosted PDSes.
+- The loopback `client_id` form is accepted for local development, so no
+  hostname is needed to work on this.
+
+Still not confirmed against the live network:
 
 - `app.bsky.graph.getRelationships` works without auth on the public AppView.
 - `com.atproto.repo.listRecords` returns newest first by default on current PDS versions.
 - CORS behavior of third-party PDSes in practice.
+- A completed sign-in, and a run that actually deletes follow records.
 
 OAuth removes one prototype assumption entirely: routing app-password sessions for `*.host.bsky.network` accounts through the bsky.social entryway.
 

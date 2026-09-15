@@ -1,6 +1,6 @@
 import { APPVIEW } from './identity';
 import { query } from './xrpc';
-import type { Session } from './session';
+import type { OwnerSession } from './oauth';
 
 /** One `app.bsky.graph.follow` record in the owner's repo. */
 export interface FollowRecord {
@@ -43,26 +43,25 @@ interface ListRecordsResponse {
  * Deliberately not the AppView's follow list: the repo is the only source that
  * still lists accounts which were deleted, deactivated, or suspended, and those
  * are exactly the follows a review most wants to reach.
+ *
+ * Unauthenticated, like every read here. `listRecords` is public, so reading
+ * your own follows needs no grant — which is what keeps the OAuth scope down to
+ * creating and deleting them.
  */
 export async function listFollows(
-	session: Session,
+	session: OwnerSession,
 	onProgress?: (loaded: number) => void
 ): Promise<FollowRecord[]> {
 	const follows: FollowRecord[] = [];
 	let cursor: string | undefined;
 
 	do {
-		const page = await query<ListRecordsResponse>(
-			session.pds,
-			'com.atproto.repo.listRecords',
-			{
-				repo: session.did,
-				collection: 'app.bsky.graph.follow',
-				limit: '100',
-				cursor
-			},
-			session.accessJwt
-		);
+		const page = await query<ListRecordsResponse>(session.pds, 'com.atproto.repo.listRecords', {
+			repo: session.did,
+			collection: 'app.bsky.graph.follow',
+			limit: '100',
+			cursor
+		});
 
 		for (const record of page.records) {
 			if (!record.value.subject) continue;

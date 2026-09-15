@@ -10,6 +10,15 @@ const dirname =
 // More info at: https://storybook.js.org/docs/next/writing-tests/integrations/vitest-addon
 export default defineConfig({
 	plugins: [sveltekit()],
+	/*
+	 * Bind 127.0.0.1, not localhost.
+	 *
+	 * The OAuth loopback flow redirects to `http://127.0.0.1:PORT/`, because
+	 * RFC 8252 bans the `localhost` hostname in redirect URIs. If Vite only
+	 * listens on localhost, the redirect back from the authorization server
+	 * lands on nothing. Open http://127.0.0.1:5173 in development.
+	 */
+	server: { host: '127.0.0.1' },
 	test: {
 		expect: {
 			requireAssertions: true

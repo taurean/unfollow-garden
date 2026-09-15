@@ -3,37 +3,43 @@ import { render } from 'vitest-browser-svelte';
 import SignIn from './SignIn.svelte';
 
 describe('SignIn', () => {
-	it('hands the handle and app password to the caller on submit', async () => {
+	it('hands the handle to the caller on submit', async () => {
 		const onSignIn = vi.fn();
 		const screen = render(SignIn, { onSignIn });
 
 		await screen.getByLabelText('Handle').fill('alice.bsky.social');
-		await screen.getByLabelText('App password').fill('xxxx-xxxx-xxxx-xxxx');
-		await screen.getByRole('button', { name: 'Sign in' }).click();
+		await screen.getByRole('button', { name: 'Sign in with Bluesky' }).click();
 
-		expect(onSignIn).toHaveBeenCalledWith('alice.bsky.social', 'xxxx-xxxx-xxxx-xxxx');
+		expect(onSignIn).toHaveBeenCalledWith('alice.bsky.social');
 	});
 
-	it('masks the app password so it is not readable on screen', async () => {
+	it('asks for nothing but a handle', async () => {
+		// The point of OAuth here: the user authenticates on their own server,
+		// and this app never has a credential to mishandle.
 		const screen = render(SignIn, { onSignIn: vi.fn() });
 
-		await expect.element(screen.getByLabelText('App password')).toHaveAttribute('type', 'password');
+		await expect.element(screen.getByLabelText('Handle')).toBeInTheDocument();
+		expect(document.querySelectorAll('input[type="password"]')).toHaveLength(0);
+	});
+
+	it('says what the app will be allowed to do before sending anyone to consent', async () => {
+		const screen = render(SignIn, { onSignIn: vi.fn() });
+
+		await expect.element(screen.getByText(/add and remove follows/i)).toBeInTheDocument();
 	});
 
 	it('shows the reason a sign-in failed', async () => {
 		const screen = render(SignIn, {
 			onSignIn: vi.fn(),
-			error: 'Invalid identifier or password'
+			error: 'Authorization was denied'
 		});
 
-		await expect
-			.element(screen.getByRole('alert'))
-			.toHaveTextContent('Invalid identifier or password');
+		await expect.element(screen.getByRole('alert')).toHaveTextContent('Authorization was denied');
 	});
 
-	it('cannot be submitted twice while a sign-in is already running', async () => {
+	it('cannot be submitted twice while a redirect is already running', async () => {
 		const screen = render(SignIn, { onSignIn: vi.fn(), busy: true });
 
-		await expect.element(screen.getByRole('button', { name: 'Signing in…' })).toBeDisabled();
+		await expect.element(screen.getByRole('button', { name: 'Redirecting…' })).toBeDisabled();
 	});
 });

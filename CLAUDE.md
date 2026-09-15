@@ -38,9 +38,15 @@ Cloudflare followed in v0 — persistence is IndexedDB in the browser, per the
 PRD's no-server-storage constraint. Adding a database or a backend is a decision
 to re-litigate that constraint, not a wiring change.
 
-**v0 authenticates with an app password**, which grants full account access.
-That is a deliberate, temporary trade recorded in `PRD.md`, "Version 0" and
-`CONTEXT.md`. It is the reason v0 is not deployed.
+**Authentication is atproto OAuth**, as a public browser client, scoped to
+`atproto repo:app.bsky.graph.follow?action=create&action=delete` and nothing
+else. The app never handles a credential: the user signs in on their own
+authorization server, and the library holds DPoP-bound tokens in IndexedDB.
+The app-password sign-in v0 shipped with is gone, along with `session.ts` and
+the `bsky.social` entryway special case it needed.
+
+Development runs on `http://127.0.0.1:5173`, never `localhost` — see
+`CONTEXT.md`.
 
 ## Git workflow
 
@@ -291,14 +297,14 @@ Never:
 - Edit markup or styles in a way the authoring boundaries forbid.
 - Skip the PR description.
 - Commit secrets.
-- Deploy v0, or widen what it can do with the app-password session. The
-  credential already grants full account access; the app must keep using it
-  only for follows. When OAuth lands, the scope is
+- Widen the OAuth scope. It is
   `atproto repo:app.bsky.graph.follow?action=create&action=delete` and nothing
-  else — `transition:generic` is never a fallback for an authorization server
-  that rejects granular scopes.
-- Store the app password. It is used once at sign-in and never written
-  anywhere.
+  else, defined once in `src/lib/atproto/client-config.ts`.
+  `transition:generic` is never a fallback for an authorization server that
+  rejects granular scopes — that failure is shown to the user, not worked
+  around.
+- Handle a credential in application code. The user authenticates on their own
+  server; tokens belong to the OAuth library.
 - Store user data on a server, or add analytics, telemetry, or a third-party
   script. Both are PRD non-goals, not preferences.
 - Send an authenticated read. Every account lookup uses public endpoints; the

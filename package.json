@@ -22,6 +22,7 @@
 		"build-storybook": "storybook build"
 	},
 	"dependencies": {
+		"@atproto/oauth-client-browser": "^0.5.7",
 		"@taurean/stylebase": "^0.11.0",
 		"bits-ui": "^2.18.1",
 		"idb": "^8.0.3"
