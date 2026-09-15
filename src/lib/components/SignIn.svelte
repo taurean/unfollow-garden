@@ -16,7 +16,8 @@
 </script>
 
 <section class="sign-in">
-	<h1 class="u:fs-5">unfollow-garden</h1>
+	<!-- The product is `unfollow.garden`; `unfollow-garden` is only the repo. -->
+	<h1 class="u:fs-6">unfollow.garden</h1>
 	<p class="lede u:fs-2 u:lh-standard">
 		Review every account you follow, one at a time. Nothing is unfollowed until you review the full
 		list and start a run.
@@ -63,75 +64,63 @@
 </section>
 
 <style>
-	.sign-in {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-lg);
-		max-width: 32rem;
-		margin-inline: auto;
-		padding-block: var(--space-3xl);
-	}
-
-	h1 {
-		font-family: var(--ff-heading);
-		margin: 0;
-	}
-
-	.lede {
-		margin: 0;
-		max-width: 34ch;
-		color: var(--hue-slate-600);
-	}
-
-	form {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2xs);
-	}
-
-	label {
-		font-family: var(--ff-ui);
-		font-size: var(--fs-1);
-		font-weight: 600;
-		margin-block-start: var(--space-sm);
-	}
-
-	input {
-		font-family: var(--ff-ui);
-		font-size: var(--fs-2);
-		padding: var(--space-2xs) var(--space-xs);
-		border: 1px solid var(--hue-slate-300);
-		border-radius: 0.25rem;
-		background: transparent;
-		color: inherit;
-	}
-
-	.hint {
-		margin: var(--space-3xs) 0 0;
-		color: var(--hue-slate-600);
-	}
-
-	.error {
-		margin: var(--space-sm) 0 0;
-		color: var(--hue-red-700);
-	}
-
-	/* The submit button needs room from the fields it commits. */
-	form :global(.button) {
-		margin-block-start: var(--space-lg);
-		align-self: flex-start;
-	}
-
-	@media (prefers-color-scheme: dark) {
-		.lede,
-		.hint {
-			color: var(--hue-slate-400);
+	@layer layout {
+		.sign-in {
+			display: flex;
+			flex-direction: column;
+			gap: var(--space-lg);
+			max-inline-size: 32rem;
+			margin-inline: auto;
+			padding: var(--space-4xl) var(--space-lg) var(--space-3xl) var(--space-2xl);
 		}
+
+		h1 {
+			margin: 0;
+		}
+
+		.lede {
+			margin: 0;
+			max-width: 34ch;
+			color: var(--ink-quiet);
+		}
+
+		form {
+			display: flex;
+			flex-direction: column;
+			gap: var(--space-2xs);
+		}
+
+		label {
+			font-family: var(--ff-ui);
+			font-size: var(--fs-1);
+			font-weight: 600;
+			margin-block-start: var(--space-sm);
+		}
+
 		input {
-			border-color: var(--hue-slate-700);
+			font-family: var(--ff-ui);
+			font-size: var(--fs-2);
+			padding: var(--space-2xs) var(--space-xs);
+			border: 1px solid var(--hue-z0-divider);
+			border-radius: 0.25rem;
+			background: transparent;
+			color: inherit;
 		}
+
+		.hint {
+			margin: var(--space-3xs) 0 0;
+			color: var(--ink-quiet);
+		}
+
 		.error {
-			color: var(--hue-red-400);
+			margin: var(--space-sm) 0 0;
+			color: var(--danger-ink);
+		}
+
+		/* The submit button needs room from the fields it commits. */
+		form :global(.button) {
+			margin-block-start: var(--space-lg);
+			align-self: flex-start;
 		}
 	}
 </style>

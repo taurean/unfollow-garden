@@ -63,9 +63,36 @@ a sync backend, or an analytics call each re-open that decision.
 
 Note that the `atprotocol-oauth` global skill's guide includes a server-side
 HMAC session-cookie step. **Skip it.** That step exists for apps that keep auth
-state on a server; this one does not. The rest of that skill applies when v1
-lands. The rest of that skill applies when v1
-lands.
+state on a server; this one does not. The rest of that skill applies when v1 lands.
+
+## Unlayered CSS beats every cascade layer
+
+stylebase declares the layer order
+`webfont, stylebase-token, token, stylebase-default, default, stylebase-utility, utility, stylebase-layout, layout`.
+Project CSS goes in `token` (semantic colours) or `layout` (block styles).
+
+The trap is that a Svelte `<style>` block is **unlayered by default**, and
+unlayered CSS wins over every layer regardless of specificity. `Button.svelte`
+sets `:global(.button)` styles; while those sat outside a layer, every
+`@layer layout` override of a button variant in a consuming component silently
+lost, and the keep and unfollow buttons rendered in the base blue with no error
+anywhere. `Button`'s styles now sit in `@layer default` for exactly this reason.
+
+Any new component whose `:global` styles are meant to be overridable has to
+declare a layer.
+
+## Colour meanings live in one file
+
+`src/lib/styles/tokens.css` names every project colour — quiet ink, the two
+strip states, the keep and unfollow pair — in the `token` layer, each resolving
+to a stylebase primitive. Components reference the semantic name, not the
+primitive, so dark mode is one block rather than a `prefers-color-scheme` rule
+in every component.
+
+Two values deliberately depart from `static/mockup.png`, which is otherwise the
+visual contract: quiet ink is `--hue-slate-600` rather than the mockup's lighter
+blue-grey, and keep is `--hue-green-700` rather than `600`. Both are for the
+PRD's WCAG AA floor. Changing them back is a two-line edit and a knowing choice.
 
 ## Svelte proxies cannot be structured-cloned
 
@@ -73,6 +100,13 @@ Anything written to IndexedDB must be a plain object — captured before it ente
 reactive state, or passed through `$state.snapshot`. A `$state` proxy throws
 `DataCloneError` on write. Carried from the prototype (PRD, "Architecture on
 suede").
+
+This has bitten once for real: `RunController.resume` reads its run out of
+`$state` and wrote it back with `saveRun(run)`, which threw mid-resume and left
+the run stuck in place. Every run write now goes through `$state.snapshot`. The
+storage layer cannot defend against this itself — `$state.snapshot` is a
+compiler rune and `db.ts` is a plain `.ts` file — so it is a call-site
+discipline, and the resume test is what holds it.
 
 ## Reads are public; the session is for writes only
 
@@ -95,7 +129,3 @@ Recorded so nobody assumes these were settled and moved on:
   `drizzle.config.ts` read before it was deleted. v0 needs no environment
   variables at all. The file is outside what the agent may read, so a human has
   to clear it.
-
-- **Queue ordering.** v0 shows unavailable accounts first, then oldest follows
-  first. The PRD orders by inactivity (TRI-2), which needs the activity loading
-  that arrives in slice 2.

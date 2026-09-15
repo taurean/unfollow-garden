@@ -2,7 +2,7 @@
 
 This file exists so a reader can decide which small part of unfollow-garden is relevant to a task without opening anything else. Areas are divided by reason for change — parts that change for the same reason share an entry, even when they sit in different directories.
 
-The application is at v0: app-password sign-in, follow loading, and the triage loop, running locally with no deployment. `PRD.md` describes v1 and its five release slices; `PRD.md`, "Version 0" records where v0 deliberately differs. This file describes what exists today.
+The application is at v0 and feature-complete against `PRD.md` except for authentication: app-password sign-in, follow loading, activity loading and metrics, the triage loop, review, unfollow runs with resume, restore, backup, and settings — running locally with no deployment. `PRD.md` describes v1 and its five release slices; `PRD.md`, "Version 0" records where v0 deliberately differs. This file describes what exists today.
 
 ## Layout
 
@@ -23,22 +23,31 @@ unfollow-garden/
 │   ├── app.d.ts               # App namespace types
 │   ├── lib/
 │   │   ├── atproto/
-│   │   │   ├── xrpc.ts        # fetch wrapper, 429 retry, XrpcError
+│   │   │   ├── xrpc.ts        # fetch wrapper, 429 retry + wait signal, XrpcError
 │   │   │   ├── identity.ts    # handle → DID → PDS; the entryway special case
 │   │   │   ├── session.ts     # app-password sign-in and refresh
-│   │   │   └── graph.ts       # follow records and profiles
+│   │   │   ├── graph.ts       # follow records, profiles, follow-back status
+│   │   │   ├── activity.ts    # author feed, likes, events, covered window
+│   │   │   └── writes.ts      # the only authenticated writes: batched applyWrites
+│   │   ├── stats/
+│   │   │   └── activity-stats.ts   # the PRD's metric definitions, as pure functions
 │   │   ├── storage/
-│   │   │   └── db.ts          # IndexedDB schema, decisions, undo, follow snapshots
+│   │   │   ├── db.ts          # IndexedDB schema, decisions, undo, follows, activity, runs
+│   │   │   └── backup.ts      # export/import format, validation, persistence request
 │   │   ├── triage/
-│   │   │   └── session.svelte.ts   # phase, queue, decisions, undo, skip
-│   │   ├── components/        # SignIn, LoadingScreen, AccountCard, TriageScreen
+│   │   │   ├── session.svelte.ts   # phase, queue, decisions, undo, skip, settings
+│   │   │   ├── scanner.svelte.ts   # background activity loading, 4 at a time
+│   │   │   └── runs.svelte.ts      # run creation, execution, resume, restore
+│   │   ├── format.ts          # shared number, date, and duration formatting
+│   │   ├── components/        # SignIn, Loading, AccountCard + parts, Triage, Review, Run, Settings
 │   │   │   └── ui/            # primitives (Button)
 │   │   ├── assets/            # favicon (still the stock Svelte logo)
-│   │   └── styles/            # project-local styles layered over stylebase
+│   │   └── styles/
+│   │       └── tokens.css     # project semantic tokens, in the `token` cascade layer
 │   ├── routes/
 │   │   ├── +layout.ts         # ssr = false — the app is client-rendered
-│   │   ├── +layout.svelte     # shell: global styles, favicon
-│   │   └── +page.svelte       # the one screen; routes on session phase
+│   │   ├── +layout.svelte     # shell: global styles, favicon, the wordmark tab
+│   │   └── +page.svelte       # the one route; routes on session phase
 │   └── stories/               # Storybook stories
 ├── static/                    # files served as-is
 ├── .github/workflows/         # CI: decision-graph PNG cleanup on merge
@@ -63,12 +72,28 @@ Why this shape: v0 authenticates with an app password, which is a deliberate and
 Seams: `signIn` is the only place a credential is handled, and the only thing v1 replaces. `pdsForLogin` is the seam between where a repo lives and where it authenticates. `xrpc.ts` is the single choke point for rate limiting and error shape, so 429 behaviour changes in one place.
 Fragile: **An app password grants full account access.** The app uses only follows, but the credential permits everything, which is why v0 is not deployed. Bluesky-hosted accounts must authenticate at the `bsky.social` entryway rather than the PDS in their DID document; getting this wrong fails as an authentication error that reads like a wrong password. Session tokens live in `sessionStorage` and die with the tab, on purpose.
 
+### Activity and metrics
+
+For: What a subject has been doing, how far back that is actually known, and the figures the decision rests on.
+Lives at: `src/lib/atproto/activity.ts`, `src/lib/stats/activity-stats.ts`, `src/lib/triage/scanner.svelte.ts`
+Why this shape: Fetching, measuring, and scheduling change for different reasons, so they are three modules. The metric definitions in particular are pure functions over an event list, which is what lets them be tested against `PRD.md` directly rather than through the screen that renders them — and they decide which accounts a person unfollows.
+Seams: `loadActivity` is the only place either source is fetched; `computeStats` is the only place a metric is defined; `ActivityScanner.start` is the only place concurrency and caching live. `onRateLimitWait` in `xrpc.ts` is the single signal that a request is stalled on a 429.
+Fragile: **The covered window is the load-bearing idea.** Metrics count only events inside it, because each source loads at most five pages — a subject who likes 300 posts a day fills that in under a week and would otherwise read as inactive since last Tuesday. Likes come from the subject's own PDS, an arbitrary third-party host that may be down or send no CORS headers; that failure belongs to the subject and is shown on their card, never thrown. `ActivityState.lastActive` is precomputed at load because the queue sorts every undecided subject by it on each advance.
+
+### Runs
+
+For: The only part of the app that changes anything outside the browser.
+Lives at: `src/lib/atproto/writes.ts`, `src/lib/triage/runs.svelte.ts`, `src/lib/components/ReviewScreen.svelte`, `src/lib/components/RunScreen.svelte`
+Why this shape: Every read in the app is public and unauthenticated. Keeping the writes in one small module is what makes that claim checkable rather than a promise.
+Seams: `applyWrites` is the single choke point for batching and token refresh. `RunController.#execute` is where a batch's bookkeeping lands, and it lands before the next batch is sent.
+Fragile: A run's targets are re-read from the owner's repo at start and again on resume, never trusted from the follow snapshot — a stale rkey fails the whole batch. A subject with more than one follow record is not marked `unfollowed` until every one of them is gone. Run records are written through `$state.snapshot`; `resume` reads its run out of `$state`, so writing it directly throws `DataCloneError`.
+
 ### Triage state and storage
 
 For: What the user is deciding about, what they decided, and making sure a decision outlives the tab.
-Lives at: `src/lib/triage/session.svelte.ts`, `src/lib/storage/db.ts`
-Why this shape: The IndexedDB schema already matches the version 1 table in `PRD.md`, including stores v0 never writes. That makes v1 an insert rather than a migration, and a migration that moves decisions is the one this project cannot afford to get wrong.
-Seams: `TriageSession.advance` is where queue ordering lives — slice 2 changes that one method to order by inactivity. `saveDecision` writes the decision and its undo entry in one transaction, so the pair cannot come apart.
+Lives at: `src/lib/triage/session.svelte.ts`, `src/lib/storage/db.ts`, `src/lib/storage/backup.ts`
+Why this shape: The IndexedDB schema matches the version 1 table in `PRD.md`. Database version 2 added the `activity` store; every upgrade step is additive, and a step may transform `decisions` or `runs` but never drop them.
+Seams: `TriageSession.advance` is where queue ordering lives, and `TriageSession.rank` is the whole of TRI-2. `saveDecision` writes the decision and its undo entry in one transaction, so the pair cannot come apart. `markDecided` is the runs-only path that deliberately skips the undo stack.
 Fragile: `current` is state, never derived from the queue. Deriving it would make the screen move on its own the moment a decision changed the queue, and would let background loading reorder the subject out from under the reader. Values written to IndexedDB must be plain objects — a `$state` proxy cannot be structured-cloned and throws on write. Skips are session-only by design and vanish on reload.
 
 ### App shell and routes
@@ -81,11 +106,11 @@ Fragile: `ssr = false` is a project-wide invariant, not a per-route convenience 
 
 ### UI foundation
 
-For: The design-system layer — primitives, their stories, and the token base they assume.
-Lives at: `src/lib/components/ui/Button.svelte`, `src/lib/styles/`, `src/stories/`, `.storybook/`
+For: The design-system layer — primitives, the project's semantic tokens, their stories, and the token base they assume.
+Lives at: `src/lib/components/ui/Button.svelte`, `src/lib/styles/tokens.css`, `src/app.css`, `src/stories/`, `.storybook/`
 Why this shape: Primitives and stories share an area because a primitive change is incomplete without its story update (`CLAUDE.md`, "Storybook discipline") — they change for the same reason by rule.
 Seams: `@taurean/stylebase` is imported exactly once, in `src/app.css` — swap or extend the token base there. `.storybook/main.ts` globs stories from all of `src/`, so a story can sit beside its component or in `src/stories/`. `Button` wraps Bits UI's `Button.Root`; new primitives follow the same wrap-a-headless-primitive pattern.
-Fragile: `Button`'s styles lean entirely on stylebase custom properties (`--hue-*`, `--space-*`, `--ff-ui`) and the `u:fs-1` utility class — removing stylebase leaves it unstyled with no build error. The PRD's timeline strip is the component with real visual complexity and does not exist yet; it will carry most of this area's weight.
+Fragile: `Button`'s styles lean entirely on stylebase custom properties and the `u:fs-1` utility class — removing stylebase leaves it unstyled with no build error. **Its styles sit in `@layer default` on purpose:** unlayered CSS beats every cascade layer, so a `:global(.button)` rule outside a layer silently wins over every block-level `@layer layout` override, and the button variants lose. `src/lib/styles/tokens.css` names every project colour in the `token` layer; nothing below it should reach for a `--hue-*` primitive that a semantic token already covers. `TimelineStrip` carries the visual weight of the account view.
 
 ### Build and deploy
 

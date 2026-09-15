@@ -19,36 +19,30 @@
 </section>
 
 <style>
-	.loading {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2xs);
-		max-width: 32rem;
-		margin-inline: auto;
-		padding-block: var(--space-4xl);
-	}
+	@layer layout {
+		.loading {
+			display: flex;
+			flex-direction: column;
+			gap: var(--space-2xs);
+			max-inline-size: 32rem;
+			margin-inline: auto;
+			padding: var(--space-4xl) var(--space-lg) var(--space-3xl) var(--space-2xl);
+		}
 
-	.step {
-		font-family: var(--ff-heading);
-		margin: 0;
-	}
+		.step {
+			margin: 0;
+		}
 
-	.count {
-		margin: 0;
-		font-variant-numeric: tabular-nums;
-		color: var(--hue-slate-600);
-	}
+		.count {
+			margin: 0;
+			font-variant-numeric: tabular-nums;
+			color: var(--ink-quiet);
+		}
 
-	.note {
-		margin-block-start: var(--space-lg);
-		color: var(--hue-slate-600);
-		max-width: 40ch;
-	}
-
-	@media (prefers-color-scheme: dark) {
-		.count,
 		.note {
-			color: var(--hue-slate-400);
+			margin-block-start: var(--space-lg);
+			color: var(--ink-quiet);
+			max-width: 40ch;
 		}
 	}
 </style>
