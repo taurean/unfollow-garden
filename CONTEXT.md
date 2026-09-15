@@ -108,18 +108,34 @@ rejects it. The app looks broken for that visitor and fine for everyone else.
 Redirect `www` to the apex at the DNS or Pages level. Serving the same bundle
 on both hostnames is the failure, not the fix.
 
-## Cloudflare serves files, and that is all it does
+## Cloudflare Workers, never Pages
 
-The production origin is **`https://unfollow.garden`**, deployed to Cloudflare
-Pages. It is baked into the bundle by `pnpm build:deploy`, which sets
-`PUBLIC_APP_ORIGIN`; the origin lives in `package.json` rather than a dashboard
-setting so it is reviewable, and so a deploy cannot quietly pick up the wrong
-one. Plain `pnpm build` leaves it at the loopback default, which is correct for
-a local build.
+A standing preference for this project, not a choice made once for this deploy.
+`@sveltejs/adapter-cloudflare` builds a Worker with static assets, configured in
+`wrangler.jsonc`. If a future change reaches for Pages, that is a regression
+against a decision, not a shortcut.
 
-Cloudflare being back does **not** re-open the server question. Pages serves
-the static bundle and the `_headers` file. There is no Worker, no origin server,
-and nothing in the request path that could see a decision.
+The production origin is **`https://unfollow.garden`**, baked into the bundle by
+`pnpm build:deploy`, which sets `PUBLIC_APP_ORIGIN`. The origin lives in
+`package.json` rather than a dashboard setting so it is reviewable in a diff,
+and so a deploy cannot quietly pick up the wrong one. Plain `pnpm build` leaves
+it at the loopback default, which is correct for a local build.
+
+**A Worker in the path does not re-open the server question, but it could.**
+This one hands back files and headers. It has no routes of its own, no storage
+bindings, and never sees a decision — those live in the browser's IndexedDB and
+never leave it. Adding a route to this Worker that receives user data would
+re-open PRD goal 4 rather than extend it, and that is a product decision, not a
+wiring change.
+
+`_headers` lives in the **project root**, not `static/`. The adapter reads it
+from there and appends its own asset-caching rules before writing it into the
+build; a copy in `static/` is warned about and ignored.
+
+There is no `_redirects` file. The SPA fallback comes from
+`assets.not_found_handling` in `wrangler.jsonc`, and the `www` redirect happens
+at DNS — a Worker never sees a request for a hostname that does not route to
+it.
 
 ## There is no server, and adding one is a product decision
 

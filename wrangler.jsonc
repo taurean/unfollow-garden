@@ -1,0 +1,27 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "unfollow-garden",
+	"compatibility_date": "2026-09-15",
+
+	// The Worker serves assets and nothing else. It has no routes of its own,
+	// no bindings to storage, and never sees a decision — those live in the
+	// browser's IndexedDB and are the reason this app can be honest about what
+	// it does with a list of people you plan to unfollow (PRD goal 4).
+	"main": ".svelte-kit/cloudflare/_worker.js",
+
+	"assets": {
+		"binding": "ASSETS",
+		"directory": ".svelte-kit/cloudflare",
+
+		// The app is one client-rendered route, so a request matching no asset
+		// is served the shell and resolved in the browser. This is also what
+		// tells the adapter to generate that fallback in the first place.
+		"not_found_handling": "single-page-application"
+	},
+
+	"observability": {
+		// Request logs only. There is no analytics here and this is not it —
+		// see the privacy non-goals in PRD.md.
+		"enabled": true
+	}
+}
