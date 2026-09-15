@@ -2,6 +2,7 @@
 	import AccountCard from '$lib/components/AccountCard.svelte';
 	import RecentColumns from '$lib/components/RecentColumns.svelte';
 	import SwipeCard from '$lib/components/SwipeCard.svelte';
+	import TriageActions from '$lib/components/TriageActions.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Toast from '$lib/components/ui/Toast.svelte';
 	import { exact } from '$lib/format';
@@ -17,6 +18,15 @@
 	);
 
 	const recent = $derived(activity.activity?.recent ?? []);
+
+	/**
+	 * The last action, read once into a value the notice's body can narrow.
+	 *
+	 * Defaulting the kind at each use site instead — `?? 'keep'` — types fine
+	 * and is a liability: the one time it fired, the notice would calmly report
+	 * a keep that never happened and offer to undo it.
+	 */
+	const lastAction = $derived(session.lastAction);
 
 	/** How the last action reads in the notice. */
 	const TOAST_VERB: Record<SwipeOutcome, string> = {
@@ -39,7 +49,7 @@
 	 * gesture is an input method, not a second code path with its own rules
 	 * about what keeping means.
 	 */
-	function commit(outcome: SwipeOutcome) {
+	function oncommit(outcome: SwipeOutcome) {
 		if (outcome === 'skip') session.skip();
 		else session.decide(outcome);
 	}
@@ -59,15 +69,15 @@
 		switch (event.key.toLowerCase()) {
 			case 'k':
 				event.preventDefault();
-				commit('keep');
+				oncommit('keep');
 				break;
 			case 'u':
 				event.preventDefault();
-				commit('unfollow');
+				oncommit('unfollow');
 				break;
 			case 's':
 				event.preventDefault();
-				commit('skip');
+				oncommit('skip');
 				break;
 			case 'z':
 				event.preventDefault();
@@ -121,7 +131,7 @@
 
 	{#if session.current}
 		{#key session.current.subjectDid}
-			<SwipeCard oncommit={commit}>
+			<SwipeCard {oncommit}>
 				<AccountCard
 					subject={session.current}
 					{activity}
@@ -131,48 +141,11 @@
 			</SwipeCard>
 		{/key}
 
-		<!--
-			The bar sticks to the bottom of the viewport on a phone and sits in
-			the flow on a wider screen. On a phone the card is taller than the
-			screen, so a bar in the flow means scrolling past the whole account
-			to act on it — several hundred times.
-		-->
-		<div class="actions">
-			<div class="decisions">
-				<Button data-variant="keep" onclick={() => commit('keep')}>
-					Keep <kbd>K</kbd>
-				</Button>
-				<Button data-variant="unfollow" onclick={() => commit('unfollow')}>
-					Unfollow <kbd>U</kbd>
-				</Button>
-			</div>
-
-			<div class="quiet-actions">
-				<Button data-variant="quiet" onclick={() => commit('skip')}>Skip <kbd>S</kbd></Button>
-				<Button data-variant="quiet" onclick={() => session.undo()}>Undo <kbd>Z</kbd></Button>
-			</div>
-
-			<p class="scope u:fs-0">
-				<!--
-					The lookback is already stated on the card itself, next to
-					the figures it governs, so the phone bar drops this half
-					rather than spending a line of thumb space repeating it.
-					The reassurance below has no second home and always shows.
-				-->
-				<span class="lookback"
-					>checking data from the last {session.settings.lookbackDays} days<br /></span
-				>marking changes nothing yet — unfollows happen in a run
-			</p>
-
-			<!--
-				Shown only where a gesture is possible at all. On a desktop with
-				no touch screen it would be advice about a control that is not
-				there.
-			-->
-			<p class="hint u:fs-0" aria-hidden="true">
-				swipe right to keep · left to unfollow · down to skip
-			</p>
-		</div>
+		<TriageActions
+			{oncommit}
+			onundo={() => session.undo()}
+			lookbackDays={session.settings.lookbackDays}
+		/>
 	{/if}
 </section>
 
@@ -183,16 +156,18 @@
 {/if}
 
 <Toast
-	open={session.lastAction !== null}
-	key={session.lastAction?.seq}
-	tone={session.lastAction?.kind ?? 'neutral'}
+	open={lastAction !== null}
+	key={lastAction?.seq}
+	tone={lastAction?.kind ?? 'neutral'}
 	action="Undo"
 	offset="var(--pinned-bar)"
 	onaction={() => session.undo()}
 	ondismiss={() => session.dismissLastAction()}
 >
-	{TOAST_VERB[session.lastAction?.kind ?? 'keep']}
-	{session.lastAction?.label}{TOAST_TAIL[session.lastAction?.kind ?? 'keep']}
+	{#if lastAction}
+		{TOAST_VERB[lastAction.kind]}
+		{lastAction.label}{TOAST_TAIL[lastAction.kind]}
+	{/if}
 </Toast>
 
 <style>
@@ -247,48 +222,6 @@
 			max-inline-size: 70ch;
 		}
 
-		.actions {
-			display: flex;
-			flex-wrap: wrap;
-			align-items: center;
-			gap: var(--space-sm);
-		}
-
-		.decisions {
-			display: flex;
-			gap: var(--space-sm);
-		}
-
-		/* Skip and undo are set apart from the two decisions, not lined up with
-		   them: they are ways out, not a third and fourth choice. */
-		.quiet-actions {
-			display: flex;
-			gap: var(--space-2xs);
-			margin-inline-start: var(--space-lg);
-		}
-
-		.scope {
-			margin: 0;
-			margin-inline-start: auto;
-			text-align: end;
-			font-family: var(--ff-ui);
-			color: var(--ink-quiet);
-		}
-
-		/* A pointer that cannot swipe gets no advice about swiping. */
-		.hint {
-			display: none;
-			margin: 0;
-			font-family: var(--ff-ui);
-			color: var(--ink-quiet);
-		}
-
-		@media (pointer: coarse) {
-			.hint {
-				display: block;
-			}
-		}
-
 		/*
 		 * The recent columns sit on their own surface below the fold. Everything
 		 * needed to decide is above it; this is for when that was not enough.
@@ -304,42 +237,6 @@
 			margin-inline: auto;
 		}
 
-		.actions :global(.button) {
-			min-block-size: var(--tap-min);
-		}
-
-		.actions :global(.button[data-variant='keep']) {
-			background-color: var(--keep);
-		}
-
-		.actions :global(.button[data-variant='keep']:hover:not(:disabled)) {
-			background-color: var(--keep-hover);
-		}
-
-		.actions :global(.button[data-variant='unfollow']) {
-			background-color: var(--unfollow);
-		}
-
-		.actions :global(.button[data-variant='unfollow']:hover:not(:disabled)) {
-			background-color: var(--unfollow-hover);
-		}
-
-		.actions :global(.button[data-variant='quiet']) {
-			background-color: transparent;
-			color: var(--ink-quiet);
-		}
-
-		.actions :global(.button[data-variant='quiet']:hover:not(:disabled)) {
-			background-color: var(--chip-bg);
-			color: var(--ink);
-		}
-
-		kbd {
-			font-family: var(--ff-mono);
-			font-size: var(--fs-0);
-			opacity: 0.7;
-		}
-
 		/* phone — see the breakpoint note in src/lib/styles/tokens.css */
 		@media (max-width: 40rem) {
 			.stage {
@@ -350,50 +247,6 @@
 				 * so the last of the card is still reachable by scrolling.
 				 */
 				--stage-trailing: calc(var(--pinned-bar) + var(--space-2xl));
-			}
-
-			/*
-			 * Pinned within thumb reach. The card above it is taller than the
-			 * screen, and a bar in the flow would mean scrolling the whole
-			 * account past to reach the two buttons — every single time.
-			 */
-			.actions {
-				position: fixed;
-				z-index: var(--layer-bar);
-				inset-block-end: 0;
-				inset-inline: 0;
-				flex-direction: column;
-				align-items: stretch;
-				gap: var(--space-2xs);
-				padding: var(--space-sm) var(--space-lg);
-				padding-block-end: calc(var(--space-sm) + env(safe-area-inset-bottom, 0px));
-				background-color: var(--surface-raised);
-				border-block-start: 1px solid var(--hue-z0-divider);
-			}
-
-			/* Two equal halves: neither decision is the default. */
-			.decisions {
-				display: grid;
-				grid-template-columns: 1fr 1fr;
-			}
-
-			.quiet-actions {
-				display: grid;
-				grid-template-columns: 1fr 1fr;
-				margin-inline-start: 0;
-			}
-
-			.scope {
-				margin-inline-start: 0;
-				text-align: center;
-			}
-
-			.lookback {
-				display: none;
-			}
-
-			.hint {
-				text-align: center;
 			}
 
 			.recent {
