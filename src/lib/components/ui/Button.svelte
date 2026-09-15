@@ -28,7 +28,13 @@
 			color: white;
 			padding: var(--space-sm) var(--space-lg);
 			border: 0;
-			border-radius: 0.375rem;
+			border-radius: var(--radius-md);
+			/*
+			 * `--space-*` is fluid and shrinks as the viewport narrows, so
+			 * padding alone makes this button smallest on the screen where a
+			 * finger needs it largest. The floor is not negotiable per-screen.
+			 */
+			min-block-size: var(--tap-min);
 			cursor: pointer;
 			text-decoration: none;
 			transition:
@@ -48,6 +54,8 @@
 		:global(.button[href]) {
 			background-color: transparent;
 			color: var(--hue-blue-500);
+			/* A link is text in a sentence, not a control, so the floor is off. */
+			min-block-size: 0;
 			padding-inline: 0;
 			text-decoration: underline;
 			text-decoration-thickness: from-font;

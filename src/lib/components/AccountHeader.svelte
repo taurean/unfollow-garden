@@ -82,7 +82,7 @@
 		.avatar {
 			inline-size: 5.5rem;
 			block-size: 5.5rem;
-			border-radius: 50%;
+			border-radius: var(--radius-pill);
 			object-fit: cover;
 		}
 
@@ -154,7 +154,7 @@
 			background-color: var(--chip-bg);
 			color: var(--chip-ink);
 			padding: var(--space-3xs) var(--space-sm);
-			border-radius: 999px;
+			border-radius: var(--radius-pill);
 			white-space: nowrap;
 		}
 
@@ -162,6 +162,7 @@
 			color: var(--warn-ink);
 		}
 
+		/* wide — see the breakpoint note in src/lib/styles/tokens.css */
 		@media (max-width: 60rem) {
 			.identity {
 				grid-template-columns: auto 1fr;
@@ -172,6 +173,43 @@
 			}
 			.flags {
 				justify-self: start;
+			}
+		}
+
+		/* phone */
+		@media (max-width: 40rem) {
+			.identity {
+				gap: var(--space-lg);
+			}
+
+			/*
+			 * A smaller avatar, because on a phone the name and handle are
+			 * what identifies the account and they are competing with it for
+			 * the same line.
+			 */
+			.avatar {
+				inline-size: 3.5rem;
+				block-size: 3.5rem;
+			}
+
+			/*
+			 * The three figures keep their row but lose the generous gap: they
+			 * are read together, so wrapping them would break the comparison
+			 * they exist for.
+			 */
+			.counts {
+				gap: var(--space-medium);
+			}
+
+			/*
+			 * A long bio is a scroll's worth of text above the decision. It is
+			 * capped and scrollable rather than truncated, because a bio is
+			 * often exactly where the reason to keep someone is written.
+			 */
+			.bio {
+				max-block-size: 9lh;
+				overflow-y: auto;
+				overscroll-behavior: contain;
 			}
 		}
 	}

@@ -175,3 +175,22 @@
 		activity={ready({ events: busyEvents })}
 	/>
 </Story>
+
+<!--
+	A month tick landing within days of the window's end.
+
+	`monthTicks` places labels on the first of each month, so the last one can
+	sit almost at the right edge of the track. Left-anchored it ran past the
+	track and clipped to a fragment — "Septem" — so past 0.9 it is anchored by
+	its right edge instead. This is the story that shows it staying inside.
+-->
+<Story name="Month label at the very end of the window" asChild>
+	<AccountCard
+		{...args}
+		subject={{ ...base, profile }}
+		activity={ready({
+			events: busyEvents,
+			window: { ...fullWindow, end: '2026-09-01T06:00:00Z' }
+		})}
+	/>
+</Story>

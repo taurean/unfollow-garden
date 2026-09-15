@@ -1,5 +1,6 @@
 @import '@taurean/stylebase';
 @import './lib/styles/tokens.css';
+@import './lib/styles/layouts.css';
 
 @layer default {
 	html,
@@ -28,7 +29,7 @@
 	:focus-visible {
 		outline: 2px solid var(--strip-active);
 		outline-offset: 2px;
-		border-radius: 2px;
+		border-radius: var(--radius-sm);
 	}
 
 	/*

@@ -40,13 +40,15 @@ unfollow-garden/
 │   │   ├── triage/
 │   │   │   ├── session.svelte.ts   # phase, queue, decisions, undo, skip, settings
 │   │   │   ├── scanner.svelte.ts   # background activity loading, 4 at a time
+│   │   │   ├── swipe.ts            # the gesture: pure rules + a `use:swipe` action
 │   │   │   └── runs.svelte.ts      # run creation, execution, resume, restore
 │   │   ├── format.ts          # shared number, date, and duration formatting
-│   │   ├── components/        # SignIn, Loading, AccountCard + parts, Triage, Review, Run, Settings
-│   │   │   └── ui/            # primitives (Button)
+│   │   ├── components/        # SignIn, Loading, AccountCard + parts, SwipeCard, TriageScreen + TriageActions, Review, Run, Settings
+│   │   │   └── ui/            # primitives (Button, Toast)
 │   │   ├── assets/            # favicon (still the stock Svelte logo)
 │   │   └── styles/
-│   │       └── tokens.css     # project semantic tokens, in the `token` cascade layer
+│   │       ├── tokens.css     # project semantic tokens, in the `token` cascade layer
+│   │       └── layouts.css    # `l:stage`, the reading column, in the `layout` layer
 │   ├── routes/
 │   │   ├── +layout.ts         # ssr = false — the app is client-rendered
 │   │   ├── +layout.svelte     # shell: global styles, favicon, the wordmark tab
@@ -95,10 +97,10 @@ Fragile: A run's targets are re-read from the owner's repo at start and again on
 ### Triage state and storage
 
 For: What the user is deciding about, what they decided, and making sure a decision outlives the tab.
-Lives at: `src/lib/triage/session.svelte.ts`, `src/lib/storage/db.ts`, `src/lib/storage/backup.ts`
+Lives at: `src/lib/triage/session.svelte.ts`, `src/lib/storage/db.ts`, `src/lib/storage/backup.ts`, `src/lib/triage/swipe.ts`, `src/lib/components/SwipeCard.svelte`
 Why this shape: The IndexedDB schema matches the version 1 table in `PRD.md`. Database version 2 added the `activity` store; every upgrade step is additive, and a step may transform `decisions` or `runs` but never drop them.
-Seams: `TriageSession.advance` is where queue ordering lives, and `TriageSession.rank` is the whole of TRI-2. `saveDecision` writes the decision and its undo entry in one transaction, so the pair cannot come apart. `markDecided` is the runs-only path that deliberately skips the undo stack.
-Fragile: `current` is state, never derived from the queue. Deriving it would make the screen move on its own the moment a decision changed the queue, and would let background loading reorder the subject out from under the reader. Values written to IndexedDB must be plain objects — a `$state` proxy cannot be structured-cloned and throws on write. Skips are session-only by design and vanish on reload.
+Seams: `TriageSession.advance` is where queue ordering lives, and `TriageSession.rank` is the whole of TRI-2. `saveDecision` writes the decision and its undo entry in one transaction, so the pair cannot come apart. `markDecided` is the runs-only path that deliberately skips the undo stack. `TriageSession.lastAction` is the single record of what the user just did, and the only thing the undo notice reads. In `swipe.ts`, `resolve` is the whole of what a released gesture means and `axisOf` the whole of which direction won — both pure, so the rules are tested without synthesising pointer events; `SwipeCard` owns only the card's position and the affordance, never a decision; `TriageScreen.commit` is the one place an outcome becomes a session call, which is the seam a flipped axis would land in and the reason it is tested with real pointer events rather than only through the geometry.
+Fragile: `current` is state, never derived from the queue. Deriving it would make the screen move on its own the moment a decision changed the queue, and would let background loading reorder the subject out from under the reader. Values written to IndexedDB must be plain objects — a `$state` proxy cannot be structured-cloned and throws on write. Skips are session-only by design and vanish on reload. **`undo` dispatches on `lastAction` before it pops the undo stack**, because a skip is not on that stack and popping unconditionally took back the decision made _before_ the skip. **The gesture shares the page with scrolling**: the surface keeps `touch-action: pan-y`, a downward drag means skip only at the top of the page, and the `pointermove` listener must stay `{ passive: false }` or `preventDefault` is a silent no-op. All of it is in `CONTEXT.md`.
 
 ### App shell and routes
 
@@ -111,10 +113,10 @@ Fragile: `ssr = false` is a project-wide invariant, not a per-route convenience 
 ### UI foundation
 
 For: The design-system layer — primitives, the project's semantic tokens, their stories, and the token base they assume.
-Lives at: `src/lib/components/ui/Button.svelte`, `src/lib/styles/tokens.css`, `src/app.css`, `src/stories/`, `.storybook/`
+Lives at: `src/lib/components/ui/Button.svelte`, `src/lib/components/ui/Toast.svelte`, `src/lib/styles/tokens.css`, `src/lib/styles/layouts.css`, `src/app.css`, `src/stories/`, `.storybook/`
 Why this shape: Primitives and stories share an area because a primitive change is incomplete without its story update (`CLAUDE.md`, "Storybook discipline") — they change for the same reason by rule.
-Seams: `@taurean/stylebase` is imported exactly once, in `src/app.css` — swap or extend the token base there. `.storybook/main.ts` globs stories from all of `src/`, so a story can sit beside its component or in `src/stories/`. `Button` wraps Bits UI's `Button.Root`; new primitives follow the same wrap-a-headless-primitive pattern.
-Fragile: `Button`'s styles lean entirely on stylebase custom properties and the `u:fs-1` utility class — removing stylebase leaves it unstyled with no build error. **Its styles sit in `@layer default` on purpose:** unlayered CSS beats every cascade layer, so a `:global(.button)` rule outside a layer silently wins over every block-level `@layer layout` override, and the button variants lose. `src/lib/styles/tokens.css` names every project colour in the `token` layer; nothing below it should reach for a `--hue-*` primitive that a semantic token already covers. `TimelineStrip` carries the visual weight of the account view.
+Seams: `@taurean/stylebase` is imported exactly once, in `src/app.css` — swap or extend the token base there. `.storybook/main.ts` globs stories from all of `src/`, so a story can sit beside its component or in `src/stories/`. `Button` wraps Bits UI's `Button.Root`; new primitives follow the same wrap-a-headless-primitive pattern. `src/lib/styles/layouts.css` holds the project's own composition utilities — currently just `l:stage`, the reading column every screen sits in. `Toast` is the exception to the wrap-a-primitive rule and says why in its own header: Bits UI ships no toast, so there is no headless behaviour to inherit and what it needs instead is a live region.
+Fragile: `Button`'s styles lean entirely on stylebase custom properties and the `u:fs-1` utility class — removing stylebase leaves it unstyled with no build error. **Its styles sit in `@layer default` on purpose:** unlayered CSS beats every cascade layer, so a `:global(.button)` rule outside a layer silently wins over every block-level `@layer layout` override, and the button variants lose. `src/lib/styles/tokens.css` names every project colour in the `token` layer; nothing below it should reach for a `--hue-*` primitive that a semantic token already covers. It also names the four things stylebase has no opinion on — `--radius-*`, `--tap-min`, `--layer-*`, and the two page-wide measurements `--top-band` and `--pinned-bar` — plus the breakpoints, which are a documented comment rather than tokens because a media query cannot read a custom property. **`--tap-min` is fixed and not a `--space-*` step on purpose:** that scale is fluid and shrinks on exactly the screens where a finger needs more room. `TimelineStrip` carries the visual weight of the account view.
 
 ### Build and deploy
 

@@ -32,7 +32,7 @@
 	);
 </script>
 
-<section class="settings">
+<section class="[ settings ] [ l:stage ]">
 	<header class="l:repel">
 		<h1 class="u:fs-5">Settings</h1>
 		<Button data-variant="quiet" onclick={() => session.closeSettings()}>Done</Button>
@@ -180,9 +180,7 @@
 			display: flex;
 			flex-direction: column;
 			gap: var(--space-2xl);
-			max-inline-size: 48rem;
-			margin-inline: auto;
-			padding: var(--space-2xl) var(--space-lg) var(--space-3xl) var(--space-2xl);
+			--stage-width: 48rem;
 		}
 
 		h1,
@@ -213,11 +211,13 @@
 
 		input[type='number'] {
 			inline-size: 8rem;
+			min-block-size: var(--tap-min);
 			font: inherit;
-			font-size: var(--fs-2);
+			/* 16px floor, or iOS Safari zooms the page in on focus and stays. */
+			font-size: max(1rem, var(--fs-2));
 			padding: var(--space-2xs) var(--space-xs);
 			border: 1px solid var(--hue-z0-divider);
-			border-radius: 0.25rem;
+			border-radius: var(--radius-md);
 			background: transparent;
 			color: inherit;
 		}
@@ -263,6 +263,7 @@
 		}
 
 		.settings :global(.button[data-variant='quiet']) {
+			min-block-size: var(--tap-min);
 			background-color: transparent;
 			color: var(--ink-quiet);
 			border: 1px solid var(--hue-z0-divider);
@@ -275,6 +276,31 @@
 
 		.settings :global(.button[data-variant='unfollow']) {
 			background-color: var(--unfollow);
+		}
+
+		/* phone — see the breakpoint note in src/lib/styles/tokens.css */
+		@media (max-width: 40rem) {
+			/*
+			 * A past run's name and its two buttons stop sharing a line: at
+			 * this width the wrap put one button per row anyway, but ragged
+			 * and without the label it belonged to.
+			 */
+			li {
+				align-items: stretch;
+				flex-direction: column;
+			}
+
+			li div {
+				margin-inline-end: 0;
+			}
+
+			.fields {
+				gap: var(--space-lg);
+			}
+
+			input[type='number'] {
+				inline-size: 100%;
+			}
 		}
 	}
 </style>

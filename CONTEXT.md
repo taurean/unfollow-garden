@@ -231,6 +231,124 @@ storage layer cannot defend against this itself — `$state.snapshot` is a
 compiler rune and `db.ts` is a plain `.ts` file — so it is a call-site
 discipline, and the resume test is what holds it.
 
+## The swipe gesture has to share the page with scrolling
+
+`src/lib/triage/swipe.ts` claims three directions on the triage card — right
+keeps, left unfollows, down skips — on a page that is also one long scroll. Two
+rules keep those from fighting, and both look removable until you try:
+
+- **The surface keeps `touch-action: pan-y`.** The browser still owns vertical
+  scrolling, and the action only calls `preventDefault` once it has _locked_ an
+  axis. `touch-action: none` would make every gesture ours and the page would
+  feel stuck; no `preventDefault` at all and a diagonal drag scrolls the page
+  while the card also moves.
+- **Down means skip only at the top of the page.** `SwipeCard.isDownArmed`
+  samples `window.scrollY <= 1` when the finger lands, once, not continuously.
+  Anywhere below the top a downward drag is the reader scrolling back up from
+  the recent columns, and taking it would be indefensible. An _upward_ drag is
+  never a gesture at any scroll position.
+
+The `pointermove` listener is registered `{ passive: false }` deliberately.
+Chrome defaults touch-adjacent listeners to passive, where `preventDefault` is
+a silent no-op — the card moves and the page scrolls too, with no error saying
+why. `setPointerCapture` is called on axis lock rather than on `pointerdown`,
+because capturing immediately retargets every later event to the card and
+swallows ordinary clicks on the links inside it.
+
+The gesture's rules are pure functions over a plain geometry object, so they
+are tested without synthesising pointer events. Anything that decides what a
+drag _means_ belongs there rather than in the component.
+
+## The buttons and the gesture are one vocabulary
+
+Unfollow sits on the **left** of the action bar and keep on the **right**,
+because that is the direction each one's swipe travels. Skip is down, and has
+no side.
+
+The other order is the tempting one — safe option first, and it reads better as
+a sentence — and it shipped that way for a day. It is wrong: someone who learns
+the gesture and then reaches for a button finds the left button doing the
+opposite of a left swipe. Two ways to express one decision must not disagree
+about where that decision lives in space.
+
+The swipe direction itself is the fixed point, and the buttons follow it.
+Right-for-yes is the convention people already have, and the destructive
+direction is not the one to make them unlearn.
+
+`TriageScreen.svelte.test.ts` asserts this by reading the expected label out of
+`intentOf` rather than hardcoding an order, so changing either side without the
+other fails.
+
+## Undo means the last thing you did, and a skip is not on the stack
+
+`undoLast` pops the IndexedDB undo stack, which only ever holds decisions.
+Skips are session-only by design (PRD, "Terms") and never reach storage. So
+`TriageSession.undo` dispatches on `lastAction` first: for a skip it clears the
+session set, and only otherwise does it pop the stack.
+
+Popping unconditionally is the bug this replaced — skip-then-undo took back the
+decision made _before_ the skip and returned the wrong account, silently. The
+test named "leaves the decision made before the skip alone" is what holds it.
+
+## Three layout facts that are page-wide, not per-screen
+
+Each of these was repeated in six components before it was named once, and in
+every case the component that forgot it had a visible defect:
+
+- **`l:stage`** (`src/lib/styles/layouts.css`) is the reading column. It owns
+  the max width, the centring, and the start gutter that clears the wordmark
+  tab — including taking that gutter back on a phone, where the wordmark is a
+  band across the top instead. Screens set `--stage-width`, `--stage-leading`
+  and `--stage-trailing`; they do not restate the gutter.
+- **`--top-band`** is the height of that phone band. The band is fixed, so
+  `main` pads itself by this once for the whole page. A screen that padded
+  itself would double up behind the interrupted-run banner.
+- **`--pinned-bar`** is the height of the triage action bar when it leaves the
+  flow and pins to the bottom of a phone screen — and `0px` above that
+  breakpoint. Both the triage stage's trailing space and the undo notice's
+  offset read it. They were two numbers once, and the drift showed up as the
+  notice sitting on top of the buttons it was reporting on. The bar itself is
+  `TriageActions.svelte`, its own block because it is its own contextual
+  problem: a row in the reading column on a desktop, a pinned bar on a phone.
+
+Media queries cannot read a custom property, so the breakpoints themselves are
+documented in `src/lib/styles/tokens.css` rather than tokenised. There are two:
+`40rem` (phone) and `60rem` (the card's header folds). The timeline strip uses
+a `@container` query instead, because it asks about its own box.
+
+## Two touch rules that are not preferences
+
+- **`--tap-min: 2.75rem`** is fixed, not a step on the `--space-*` scale.
+  stylebase's spacing is fluid and _shrinks_ as the viewport narrows, so a
+  control padded only with `--space-*` is at its smallest on the screen where a
+  finger needs it largest.
+- **Inputs are `max(1rem, …)`.** iOS Safari zooms the whole page in when a
+  focused input's text is under 16px and does not zoom back out on blur.
+  `--fs-2` tops out around 18.75px but starts at 14.4px — exactly the
+  small-screen end where the zoom fires.
+
+## Two traps when testing the timeline strip
+
+Both of these made a regression test for the clipped month label pass against
+the very bug it was written for, and neither announces itself:
+
+- **`.strip` is an inline-size container**, and its own `@container` query
+  hides every second month label below 30rem. At the test runner's default body
+  width the label under test was simply `display: none`, so an assertion that
+  skipped hidden labels skipped the only one that mattered. Set an explicit
+  width before rendering it.
+- **A window ending on the 1st of a month puts that month's tick at the
+  _start_,** not the end. Reproducing an edge-anchored label needs an end date
+  well into the month.
+
+Separately: the component's `window` prop shares a name with one of the testing
+library's own mount options, so its props have to go through an explicit
+`props:` object or the flat form is read as that option and the render throws.
+
+Worth generalising from: a test that passes should be run once against a
+deliberately broken version of the thing it covers. Both new tests on this
+surface were confirmed that way, and one of them needed rewriting because of it.
+
 ## Deliberately unresolved
 
 Recorded so nobody assumes these were settled and moved on:

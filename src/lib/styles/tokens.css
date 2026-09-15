@@ -46,11 +46,105 @@
 		--unfollow: var(--hue-rose-800);
 		--unfollow-hover: var(--hue-rose-900);
 
+		/*
+		 * Skip is the third swipe direction, and deliberately not a third
+		 * colour in the keep/unfollow conversation. Slate says "set this one
+		 * aside" without joining the two decisions as a rival to them.
+		 */
+		--skip: var(--hue-slate-600);
+
 		--danger-ink: var(--hue-red-700);
 		--warn-ink: var(--hue-amber-700);
 
+		/*
+		 * Corner radii. stylebase has no opinion on these, and the app had
+		 * four literals (`2px`, `0.375rem`, `999px`, and a bare `1px`) that
+		 * were each a guess made in isolation.
+		 *
+		 * `sm` is for marks too small to carry a curve — the strip's buckets
+		 * and the media notes. `md` is the control radius. `pill` is the
+		 * fully-rounded end used by chips and the avatar's neighbours.
+		 */
+		--radius-sm: 2px;
+		--radius-md: 0.375rem;
+		--radius-lg: 0.75rem;
+		--radius-pill: 999px;
+
+		/*
+		 * The smallest a control may be on a touch screen.
+		 *
+		 * 2.75rem is WCAG 2.2 AA's 44×44 CSS-pixel target. It is a fixed
+		 * value on purpose: `--space-*` is fluid and *shrinks* as the
+		 * viewport narrows, so it is exactly the wrong scale to size a
+		 * finger target from. A control padded only with `--space-*` is at
+		 * its smallest on the screen where it needs to be largest.
+		 */
+		--tap-min: 2.75rem;
+
+		/*
+		 * The height of the fixed band across the top of a phone screen — the
+		 * wordmark on one side, the utility links on the other.
+		 *
+		 * A fixed value that both the band and the content below it read, so
+		 * they cannot disagree. Measuring it instead would mean the band's own
+		 * font metrics deciding how much clearance the first card gets, which
+		 * is a relationship nothing states and nobody would look for.
+		 */
+		--top-band: 2.25rem;
+
+		/*
+		 * The height of the triage action bar pinned to the bottom of a phone
+		 * screen: two rows of controls plus its own padding and the two lines
+		 * of small print under them.
+		 *
+		 * Zero above the phone breakpoint, because there the bar is in the flow
+		 * and covers nothing. Anything that floats over the bottom of the page —
+		 * the undo notice — adds this to its own offset, and the triage screen
+		 * adds it to its trailing space so the card can still be scrolled clear.
+		 * One definition, because two would drift and the drift would show up as
+		 * a notice sitting on top of the buttons it is about.
+		 */
+		--pinned-bar: 0px;
+
+		/*
+		 * Stacking order, named rather than counted.
+		 *
+		 * The wordmark tab and the utility links both sat on a bare
+		 * `z-index: 1` and overlapped each other once the wordmark went
+		 * static on a phone. Naming the three things that ever stack makes
+		 * the collision a spelling question instead of an arithmetic one.
+		 */
+		--layer-tab: 10;
+		--layer-bar: 20;
+		--layer-toast: 30;
+
+		/*
+		 * Breakpoints, as documentation.
+		 *
+		 * Media queries cannot read a custom property — `@media (max-width:
+		 * var(--bp-phone))` is not valid CSS and never has been — so these
+		 * cannot be tokens that the queries consume. They are recorded here
+		 * because the alternative is what this file replaced: 40rem, 50rem
+		 * and 60rem each chosen locally, with nothing saying whether two
+		 * components meant the same boundary or different ones.
+		 *
+		 *   phone   max-width: 40rem   one column, thumb-reach controls
+		 *   wide    max-width: 60rem   the card's four-column header folds
+		 *
+		 * Anything narrower than a component — the timeline strip — uses a
+		 * `@container` query instead, because it is asking about its own box
+		 * and not about the viewport.
+		 */
+
 		/* The widest the reading column gets before lines grow unwieldy. */
 		--stage-max: 78rem;
+	}
+
+	/* phone — the bar leaves the flow and pins itself over the page. */
+	@media (max-width: 40rem) {
+		:root {
+			--pinned-bar: calc(var(--tap-min) * 2 + var(--space-2xl));
+		}
 	}
 
 	@media (prefers-color-scheme: dark) {
@@ -75,6 +169,9 @@
 
 			--danger-ink: var(--hue-red-400);
 			--warn-ink: var(--hue-amber-400);
+
+			/* Skip is ink-on-ground, so it does follow the theme. */
+			--skip: var(--hue-slate-500);
 		}
 	}
 }

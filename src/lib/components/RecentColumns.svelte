@@ -145,7 +145,7 @@
 			background-color: var(--chip-bg);
 			color: var(--chip-ink);
 			padding: 0 var(--space-2xs);
-			border-radius: 2px;
+			border-radius: var(--radius-sm);
 		}
 	}
 </style>

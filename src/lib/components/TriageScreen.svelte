@@ -1,8 +1,12 @@
 <script lang="ts">
 	import AccountCard from '$lib/components/AccountCard.svelte';
 	import RecentColumns from '$lib/components/RecentColumns.svelte';
+	import SwipeCard from '$lib/components/SwipeCard.svelte';
+	import TriageActions from '$lib/components/TriageActions.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
+	import Toast from '$lib/components/ui/Toast.svelte';
 	import { exact } from '$lib/format';
+	import type { SwipeOutcome } from '$lib/triage/swipe';
 	import type { TriageSession } from '$lib/triage/session.svelte';
 
 	let { session }: { session: TriageSession } = $props();
@@ -14,6 +18,41 @@
 	);
 
 	const recent = $derived(activity.activity?.recent ?? []);
+
+	/**
+	 * The last action, read once into a value the notice's body can narrow.
+	 *
+	 * Defaulting the kind at each use site instead — `?? 'keep'` — types fine
+	 * and is a liability: the one time it fired, the notice would calmly report
+	 * a keep that never happened and offer to undo it.
+	 */
+	const lastAction = $derived(session.lastAction);
+
+	/** How the last action reads in the notice. */
+	const TOAST_VERB: Record<SwipeOutcome, string> = {
+		keep: 'Keeping',
+		unfollow: 'Marked',
+		skip: 'Skipped'
+	};
+
+	/** Whether the account still has to be told what happens next. */
+	const TOAST_TAIL: Record<SwipeOutcome, string> = {
+		keep: '',
+		unfollow: ' for unfollow',
+		skip: ' for later'
+	};
+
+	/**
+	 * A swipe and a button press are the same decision.
+	 *
+	 * Routing both through one function is what keeps them that way: the
+	 * gesture is an input method, not a second code path with its own rules
+	 * about what keeping means.
+	 */
+	function oncommit(outcome: SwipeOutcome) {
+		if (outcome === 'skip') session.skip();
+		else session.decide(outcome);
+	}
 
 	/**
 	 * Keyboard triage.
@@ -30,15 +69,15 @@
 		switch (event.key.toLowerCase()) {
 			case 'k':
 				event.preventDefault();
-				session.decide('keep');
+				oncommit('keep');
 				break;
 			case 'u':
 				event.preventDefault();
-				session.decide('unfollow');
+				oncommit('unfollow');
 				break;
 			case 's':
 				event.preventDefault();
-				session.skip();
+				oncommit('skip');
 				break;
 			case 'z':
 				event.preventDefault();
@@ -50,7 +89,7 @@
 
 <svelte:window onkeydown={onKeydown} />
 
-<section class="stage">
+<section class="[ stage ] [ l:stage ]">
 	<header class="status u:fs-0 tabular">
 		<p>
 			<strong>{exact(session.remaining.length)}</strong> to review
@@ -92,32 +131,21 @@
 
 	{#if session.current}
 		{#key session.current.subjectDid}
-			<AccountCard
-				subject={session.current}
-				{activity}
-				lookbackDays={session.settings.lookbackDays}
-				thresholdDays={session.settings.thresholdDays}
-			/>
+			<SwipeCard {oncommit}>
+				<AccountCard
+					subject={session.current}
+					{activity}
+					lookbackDays={session.settings.lookbackDays}
+					thresholdDays={session.settings.thresholdDays}
+				/>
+			</SwipeCard>
 		{/key}
 
-		<div class="actions">
-			<Button data-variant="keep" onclick={() => session.decide('keep')}>
-				Keep <kbd>K</kbd>
-			</Button>
-			<Button data-variant="unfollow" onclick={() => session.decide('unfollow')}>
-				Unfollow <kbd>U</kbd>
-			</Button>
-
-			<div class="quiet-actions">
-				<Button data-variant="quiet" onclick={() => session.skip()}>Skip <kbd>S</kbd></Button>
-				<Button data-variant="quiet" onclick={() => session.undo()}>Undo <kbd>Z</kbd></Button>
-			</div>
-
-			<p class="scope u:fs-0">
-				checking data from the last {session.settings.lookbackDays} days<br />
-				marking changes nothing yet — unfollows happen in a run
-			</p>
-		</div>
+		<TriageActions
+			{oncommit}
+			onundo={() => session.undo()}
+			lookbackDays={session.settings.lookbackDays}
+		/>
 	{/if}
 </section>
 
@@ -127,17 +155,30 @@
 	</section>
 {/if}
 
+<Toast
+	open={lastAction !== null}
+	key={lastAction?.seq}
+	tone={lastAction?.kind ?? 'neutral'}
+	action="Undo"
+	offset="var(--pinned-bar)"
+	onaction={() => session.undo()}
+	ondismiss={() => session.dismissLastAction()}
+>
+	{#if lastAction}
+		{TOAST_VERB[lastAction.kind]}
+		{lastAction.label}{TOAST_TAIL[lastAction.kind]}
+	{/if}
+</Toast>
+
 <style>
 	@layer layout {
+		/* Width, centring and the wordmark gutter come from `l:stage`. */
 		.stage {
 			display: flex;
 			flex-direction: column;
 			gap: var(--space-xl);
-			max-inline-size: var(--stage-max);
-			margin-inline: auto;
-			padding: var(--space-xl) var(--space-lg) var(--space-2xl);
-			/* Room for the fixed wordmark tab on the viewport's left edge. */
-			padding-inline-start: var(--space-2xl);
+			--stage-leading: var(--space-xl);
+			--stage-trailing: var(--space-2xl);
 		}
 
 		.status {
@@ -181,29 +222,6 @@
 			max-inline-size: 70ch;
 		}
 
-		.actions {
-			display: flex;
-			flex-wrap: wrap;
-			align-items: center;
-			gap: var(--space-sm);
-		}
-
-		/* Skip and undo are set apart from the two decisions, not lined up with
-		   them: they are ways out, not a third and fourth choice. */
-		.quiet-actions {
-			display: flex;
-			gap: var(--space-2xs);
-			margin-inline-start: var(--space-lg);
-		}
-
-		.scope {
-			margin: 0;
-			margin-inline-start: auto;
-			text-align: end;
-			font-family: var(--ff-ui);
-			color: var(--ink-quiet);
-		}
-
 		/*
 		 * The recent columns sit on their own surface below the fold. Everything
 		 * needed to decide is above it; this is for when that was not enough.
@@ -219,45 +237,20 @@
 			margin-inline: auto;
 		}
 
-		.actions :global(.button[data-variant='keep']) {
-			background-color: var(--keep);
-		}
-
-		.actions :global(.button[data-variant='keep']:hover:not(:disabled)) {
-			background-color: var(--keep-hover);
-		}
-
-		.actions :global(.button[data-variant='unfollow']) {
-			background-color: var(--unfollow);
-		}
-
-		.actions :global(.button[data-variant='unfollow']:hover:not(:disabled)) {
-			background-color: var(--unfollow-hover);
-		}
-
-		.actions :global(.button[data-variant='quiet']) {
-			background-color: transparent;
-			color: var(--ink-quiet);
-		}
-
-		.actions :global(.button[data-variant='quiet']:hover:not(:disabled)) {
-			background-color: var(--chip-bg);
-			color: var(--ink);
-		}
-
-		kbd {
-			font-family: var(--ff-mono);
-			font-size: var(--fs-0);
-			opacity: 0.7;
-		}
-
+		/* phone — see the breakpoint note in src/lib/styles/tokens.css */
 		@media (max-width: 40rem) {
-			.quiet-actions {
-				margin-inline-start: 0;
+			.stage {
+				gap: var(--space-lg);
+				--stage-leading: var(--space-lg);
+				/*
+				 * Clearance for the bar now pinned over the bottom of the page,
+				 * so the last of the card is still reachable by scrolling.
+				 */
+				--stage-trailing: calc(var(--pinned-bar) + var(--space-2xl));
 			}
-			.scope {
-				margin-inline-start: 0;
-				text-align: start;
+
+			.recent {
+				padding: var(--space-2xl) var(--space-lg);
 			}
 		}
 	}

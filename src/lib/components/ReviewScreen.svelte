@@ -11,7 +11,7 @@
 	const lastActive = (subjectDid: string) => session.scanner.get(subjectDid).lastActive;
 </script>
 
-<section class="review">
+<section class="[ review ] [ l:stage ]">
 	<header>
 		<h1 class="u:fs-5">
 			{marked.length === 0
@@ -91,9 +91,7 @@
 			display: flex;
 			flex-direction: column;
 			gap: var(--space-xl);
-			max-inline-size: 56rem;
-			margin-inline: auto;
-			padding: var(--space-2xl) var(--space-lg) var(--space-3xl) var(--space-2xl);
+			--stage-width: 56rem;
 		}
 
 		h1 {
@@ -135,7 +133,7 @@
 		.avatar-empty {
 			inline-size: 2.5rem;
 			block-size: 2.5rem;
-			border-radius: 50%;
+			border-radius: var(--radius-pill);
 			object-fit: cover;
 		}
 
@@ -176,6 +174,7 @@
 
 		.actions :global(.button[data-variant='quiet']),
 		li :global(.button[data-variant='quiet']) {
+			min-block-size: var(--tap-min);
 			background-color: transparent;
 			color: var(--ink-quiet);
 			border: 1px solid var(--hue-z0-divider);
@@ -186,12 +185,39 @@
 			color: var(--ink);
 		}
 
-		@media (max-width: 45rem) {
+		/* phone — see the breakpoint note in src/lib/styles/tokens.css */
+		@media (max-width: 40rem) {
+			/*
+			 * The per-row Keep button drops to its own line rather than
+			 * squeezing the name: at this width a four-column row leaves the
+			 * handle about six characters, and the handle is how the row is
+			 * recognised.
+			 */
 			li {
-				grid-template-columns: auto minmax(0, 1fr) auto;
+				grid-template-columns: auto minmax(0, 1fr);
+				gap: var(--space-sm) var(--space-lg);
+				padding-block: var(--space-lg);
 			}
+
 			.when {
 				grid-column: 2 / -1;
+			}
+
+			li :global(.button[data-variant='quiet']) {
+				grid-column: 2 / -1;
+				justify-self: start;
+			}
+
+			.actions {
+				position: sticky;
+				inset-block-end: 0;
+				flex-direction: column;
+				align-items: stretch;
+				margin-inline: calc(var(--space-lg) * -1);
+				padding: var(--space-sm) var(--space-lg);
+				padding-block-end: calc(var(--space-sm) + env(safe-area-inset-bottom, 0px));
+				background-color: var(--surface-raised);
+				border-block-start: 1px solid var(--hue-z0-divider);
 			}
 		}
 	}
