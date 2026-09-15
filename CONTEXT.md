@@ -94,6 +94,40 @@ A prerendered `+server.ts` keeps its body and **drops its response headers**,
 which is why the client metadata route's CORS and cache headers are restated in
 `_headers`. They still apply in development, where the route is served live.
 
+## Wrangler reads `.env`, and uploads what it finds
+
+`wrangler types` generated an `Env` containing `CLOUDFLARE_ACCOUNT_ID`,
+`CLOUDFLARE_DATABASE_ID` and `CLOUDFLARE_D1_TOKEN` — the dead D1 credentials
+left in `.env` when Drizzle was ripped out at kickoff. Wrangler picks up `.env`
+as Worker variables, and `wrangler deploy` uploads them.
+
+**This Worker needs no variables at all.** Anything in `.env` is either dead or
+about to be published as a Worker env var. Clear it before deploying. `.env` is
+gitignored so none of it ever reached the repo, but "not in git" and "not in
+the deployed Worker" are different claims.
+
+Agents cannot read `.env*`, so this has to be checked by a person. It is the
+same file `.env.example` is listed against under "Deliberately unresolved".
+
+## The client metadata defaults to production, on purpose
+
+`src/routes/oauth-client-metadata.json/+server.ts` defaults its origin to
+`https://unfollow.garden` rather than to a development one, and that is not an
+oversight.
+
+An `http:` page uses the loopback `client_id` form, which carries its own
+redirect URI and scope and makes the authorization server skip fetching the
+document entirely. In development this file is written and never read. A
+development default would therefore exist only to be ignored — while being the
+one value that silently breaks production when a build runs the wrong script.
+
+Which happened: Cloudflare's own build ran `pnpm run build` where the
+production origin lived behind `pnpm run build:deploy`, and the bundle would
+have shipped claiming `client_id: http://127.0.0.1:5173/…`. Sign-in would have
+failed for everyone, with nothing in the build to suggest why. `build:deploy`
+is gone and `pnpm build` is deployable; `PUBLIC_APP_ORIGIN` overrides it for a
+preview on another hostname.
+
 ## `www` must redirect to the apex, or sign-in breaks
 
 `client_id` is the URL the metadata is served from, and the authorization

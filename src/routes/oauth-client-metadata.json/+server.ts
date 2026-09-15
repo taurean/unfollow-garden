@@ -9,10 +9,15 @@ import { buildClientMetadata } from '$lib/atproto/client-config';
  * means the origin cannot be read from the request — it is fixed when the
  * bundle is built.
  *
- * `pnpm build:deploy` sets `PUBLIC_APP_ORIGIN` to the production origin; plain
- * `pnpm build` leaves it at the loopback default. The origin lives in
- * `package.json` rather than a dashboard setting so it is reviewable, and so a
- * deploy cannot quietly pick up the wrong one.
+ * The default is the production origin, and that is deliberate. An `http:`
+ * page uses the loopback `client_id` form, which carries its own redirect URI
+ * and scope and makes the authorization server skip fetching this document
+ * entirely — so in development this file is written and never read. A
+ * development default would therefore exist only to be ignored, while being
+ * the one value that silently breaks production when a build runs the wrong
+ * script. Cloudflare's build did exactly that.
+ *
+ * `PUBLIC_APP_ORIGIN` overrides it, for a preview deploy on another hostname.
  *
  * The default is the loopback dev origin, which is correct for a local build
  * and never reached in practice: an `http:` page uses the loopback `client_id`
@@ -30,11 +35,11 @@ import { buildClientMetadata } from '$lib/atproto/client-config';
  */
 export const prerender = true;
 
-const DEV_ORIGIN = 'http://127.0.0.1:5173';
+const PRODUCTION_ORIGIN = 'https://unfollow.garden';
 
 export const GET = () => {
 	// Prerendering runs in Node, so the build environment is readable here.
-	const origin = (process.env.PUBLIC_APP_ORIGIN || DEV_ORIGIN).replace(/\/$/, '');
+	const origin = (process.env.PUBLIC_APP_ORIGIN || PRODUCTION_ORIGIN).replace(/\/$/, '');
 
 	return json(buildClientMetadata(origin), {
 		headers: {

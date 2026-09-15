@@ -10,8 +10,7 @@
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build",
-		"build:deploy": "PUBLIC_APP_ORIGIN=https://unfollow.garden vite build",
-		"deploy": "pnpm build:deploy && wrangler deploy",
+		"deploy": "pnpm build && wrangler deploy",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
@@ -21,7 +20,8 @@
 		"test:unit": "vitest",
 		"test": "npm run test:unit -- --run",
 		"storybook": "storybook dev -p 6006",
-		"build-storybook": "storybook build"
+		"build-storybook": "storybook build",
+		"types": "wrangler types"
 	},
 	"dependencies": {
 		"@atproto/oauth-client-browser": "^0.5.7",

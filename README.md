@@ -89,6 +89,10 @@ Cloudflare Pages settings:
 | Output directory      | `build`                                |
 | Environment variables | none — the origin is in `package.json` |
 
+**Clear `.env` before deploying.** Wrangler reads it as Worker variables and
+uploads them; it still carries the dead `CLOUDFLARE_*` D1 credentials from
+before Drizzle was removed. This Worker needs no variables at all.
+
 Two things that will break sign-in if you skip them:
 
 - **Redirect `www` to the apex.** `client_id` is the URL the metadata is served
