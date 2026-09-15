@@ -1,0 +1,10 @@
+# Cloudflare Pages routing.
+#
+# Static assets are matched before these rules, so `/oauth-client-metadata.json`
+# and everything under `/_app/` are served as themselves and never reach the
+# fallback below.
+#
+# The app is one client-rendered route, so anything else is served the shell and
+# resolved in the browser. Without this a mistyped or shared deep link gets a
+# bare 404 instead of the app.
+/*  /index.html  200

@@ -491,7 +491,7 @@ Each slice ships on its own and leaves the app usable.
 
 1. Should restore ship in v1? It is why the scope includes `create`. If restore moves to a later version, drop `create` from the scope and accept a second consent flow later.
 2. Should the review queue support filters, such as "doesn't follow me" or "inactive 90+ days," as a way to order work? This would still require individual decisions. Leaning toward a later version.
-3. Where will this deploy, and under what name? The `client_id` URL is the app's identity to authorization servers and appears on the consent screen, so it should be settled before slice 1 ships to production.
+3. ~~Where will this deploy, and under what name?~~ **Answered:** `https://unfollow.garden`, on Cloudflare Pages, serving the static bundle and nothing else. The origin is baked in at build time by `pnpm build:deploy`. `www` must redirect to the apex or `client_id` will not match what the authorization server fetched — see `CONTEXT.md`.
 
 ## Prototype findings
 
