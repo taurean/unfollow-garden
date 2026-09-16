@@ -1,5 +1,7 @@
 # unfollow-garden
 
+> ==warning== slop ahead
+
 Review every Bluesky account you follow, one at a time, and unfollow the ones you're done with.
 
 Follow lists drift. People stop posting, change what they post about, or move on, and the list keeps growing. Bluesky shows who you follow as a flat list with no activity context, so judging one account means opening the profile, scrolling, and guessing how active it is — and likes, which are most of some people's activity, aren't visible on other people's profiles at all. That's a few minutes per account. At 800 follows it doesn't get done.
