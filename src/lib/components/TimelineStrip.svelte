@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { EVENT_KINDS, type ActivityEvent, type CoveredWindow } from '$lib/atproto/activity';
 	import { bucketEvents, monthTicks } from '$lib/stats/activity-stats';
+	import { duration } from '$lib/format';
 
 	let {
 		events,
@@ -22,6 +23,17 @@
 	const bucketCount = $derived(Math.max(24, Math.round(lookbackDays / DAYS_PER_BUCKET)));
 
 	const months = $derived(monthTicks(covered, lookbackDays));
+
+	/**
+	 * How much time one mark covers, derived rather than stated.
+	 *
+	 * The bucket count has a floor, so the span is only five days at the
+	 * lookbacks wide enough to need it — a 30-day lookback puts barely more
+	 * than a day in each. Hard-coding "5 days" would be wrong for every
+	 * setting but the default, and the whole point of saying it is that a
+	 * reader can tell a week's silence from a season's.
+	 */
+	const daysPerBucket = $derived(lookbackDays / bucketCount);
 
 	const rows = $derived(
 		EVENT_KINDS.map((kind) => ({
@@ -46,6 +58,12 @@
 			: covered.reason === 'account-created'
 				? 'before the account existed'
 				: null
+	);
+
+	/* Built as a string so the sentences keep their space between them. */
+	const scaleNote = $derived(
+		`Each mark is about ${duration(daysPerBucket)}.` +
+			(uncoveredReason && covered.reason !== 'lookback' ? ` Hatched: ${uncoveredReason}.` : '')
 	);
 </script>
 
@@ -87,9 +105,14 @@
 		</div>
 	{/each}
 
-	{#if uncoveredReason && covered.reason !== 'lookback'}
-		<p class="uncovered-note">Hatched: {uncoveredReason}</p>
-	{/if}
+	<!--
+		The two sentences are joined with an explicit space. Svelte collapses the
+		indentation around a wrapped `{#if}` to nothing, and without it they ran
+		together as "5 days.Hatched:".
+	-->
+	<p class="scale-note">
+		{scaleNote}
+	</p>
 </div>
 
 <style>
@@ -158,13 +181,13 @@
 		}
 
 		.label,
-		.uncovered-note {
+		.scale-note {
 			font-family: var(--ff-ui);
 			font-size: var(--fs-0);
 			color: var(--ink-quiet);
 		}
 
-		.uncovered-note {
+		.scale-note {
 			margin: 0;
 		}
 
