@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { compact, longDate, relative } from '$lib/format';
 	import { identityLink, INVALID_HANDLE } from '$lib/atproto/links';
+	import { parseBio } from '$lib/atproto/richtext';
 	import type { FollowSnapshot } from '$lib/storage/db';
 	import type { IdentityState } from '$lib/triage/identity.svelte';
 
@@ -26,6 +27,13 @@
 	const gone = $derived(subject.profileMissingSince !== null);
 
 	const link = $derived(identityLink(profile, subject.subjectDid));
+
+	/*
+	 * A profile description carries no facets — unlike a post, nothing in the
+	 * record marks where a link or a handle is — so they are detected from the
+	 * text, the way Bluesky's own client does it.
+	 */
+	const bio = $derived(parseBio(profile?.description ?? ''));
 	const name = $derived(
 		profile?.displayName?.trim() ||
 			(profile && profile.handle !== INVALID_HANDLE ? profile.handle : null) ||
@@ -116,7 +124,14 @@
 
 	<div class="bio">
 		{#if profile?.description}
-			<p class="description u:fs-1 u:lh-standard">{profile.description}</p>
+			<p class="description u:fs-1 u:lh-standard">
+				{#each bio as segment, index (index)}{#if segment.kind === 'text'}{segment.text}{:else}<a
+							class="in-bio"
+							href={segment.href}
+							target="_blank"
+							rel="external noreferrer noopener">{segment.text}</a
+						>{/if}{/each}
+			</p>
 		{/if}
 
 		{#if gone}
@@ -285,6 +300,23 @@
 		/* A DID is an identifier, not a name: monospace so it can be compared. */
 		.handle[data-kind='did'] {
 			font-family: var(--ff-mono);
+		}
+
+		/*
+		 * Underlined at rest, unlike the handle above. These sit inside a
+		 * paragraph with no other cue that part of it is a link, and a bio is
+		 * exactly where someone puts the thing they want you to go and read.
+		 */
+		.in-bio {
+			color: inherit;
+			text-decoration: underline;
+			text-underline-offset: 0.15em;
+			overflow-wrap: anywhere;
+		}
+
+		.in-bio:hover {
+			color: var(--ink);
+			text-decoration-thickness: 2px;
 		}
 
 		.counts {

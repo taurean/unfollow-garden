@@ -269,6 +269,25 @@
 	/>
 </Story>
 
+<!--
+	A bio with a link and a mention in it. Profile descriptions carry no facets,
+	so both are detected from the text rather than read from the record.
+-->
+<Story name="Bio with links and mentions" asChild>
+	<AccountCard
+		{...args}
+		subject={{
+			...base,
+			profile: {
+				...profile,
+				description:
+					'Pre-seed, seed, and development grants for projects in the AT Protocol ecosystem.\n\nFounded by @wang.social — see https://example.com/grants or www.example.org.\n\nMail me@example.com (not a mention).'
+			}
+		}}
+		activity={ready({ events: busyEvents })}
+	/>
+</Story>
+
 <!-- Followed since the last finished pass, which is why a second pass exists. -->
 <Story name="New since the last pass" asChild>
 	<AccountCard
