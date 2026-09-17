@@ -56,7 +56,7 @@ The app should work for any atproto account, including accounts on self-hosted P
 | Follow record  | An `app.bsky.graph.follow` record in the owner's repo. One subject can have more than one.                              |
 | Decision       | `keep` or `unfollow`, set by the user. `unfollowed` is set by the app after a run deletes the subject's follow records. |
 | Skip           | Moves a subject to the end of the queue without deciding. Session-only by design.                                       |
-| Lookback       | How many days of activity to load per subject. Default 180.                                                             |
+| Lookback       | How many days of activity to load per subject. Default 365.                                                             |
 | Gap threshold  | The minimum length of an inactive stretch worth flagging. Default 30 days.                                              |
 | Covered window | The period the loaded activity fully accounts for. See "Activity metrics."                                              |
 | Run            | One execution of unfollows, recorded with its targets and outcome.                                                      |
@@ -175,6 +175,53 @@ RESTORE-1. The runs screen lists past runs with date and target count. From a ru
 - The screen states that re-followed accounts will be notified and that the original follow date is not recovered.
 - Re-followed subjects get the decision `keep`.
 
+### Revisiting a review
+
+PASS-1. The user can see every account they have kept.
+
+- The list shows each kept account with when it was kept, most recent first,
+  and can be filtered by display name, handle, or DID.
+- Any of them can be marked for unfollow from the list.
+
+PASS-2. A finished pass is dated, so a later one can tell new follows from the
+backlog.
+
+- The date is recorded only when the queue empties with nothing skipped; a
+  sitting that ends with a backlog is not a finished pass.
+- A follow made after that date is counted and marked as new. Before a first
+  finished pass, nothing is new.
+
+PASS-3. Starting the review over clears decisions and the undo stack, and
+reloads the follow list from the network. Cached activity, settings, and run
+history survive. It is reachable without opening settings.
+
+### What this would have cost elsewhere
+
+COST-1. The app states what loading the user's own follows and their activity
+would have cost bought from X's API, and that it was free on AT Protocol.
+
+- Only resources that actually crossed the network are counted. Anything served
+  from the browser's cache cost nothing and is not counted.
+- An install whose data was already cached seeds its counts once from what is
+  stored, so a review already done is not reported as free.
+- The figure opens a breakdown: count, rate, and subtotal per kind of read,
+  with the endpoint each came from named.
+- The rate card carries the date it was last checked and links its source.
+  Nothing is fetched from x.com at runtime.
+
+This is a claim about another company's published prices, so it is dated,
+sourced, itemised, and conservative where it is uncertain. It is not a goal of
+the product; it is one sentence about why the product can exist.
+
+### Reading elsewhere
+
+LINK-1. The user chooses which web client profile and post links open in.
+
+- The choice applies to handles, mentions inside a bio, and recent posts.
+- Clients differ in how a URL names an account. A link that cannot be built for
+  the chosen client — a bio mention on a client that needs a DID, before that
+  handle has been resolved — falls back rather than being built wrong.
+
 ### Backup
 
 BACKUP-1. The user can export decisions, settings, the undo stack, and run records to a versioned JSON file. The activity cache is not exported.
@@ -225,7 +272,18 @@ Changing the gap threshold recomputes metrics from cached events without refetch
 
 ### Timeline strip
 
-The strip spans the full lookback. It has one row per kind with a tick per event, month boundaries, and shaded bands for long gaps. The part of the lookback outside the covered window is hatched and labeled either "not loaded (fetch limit reached)" or "before the account existed." The strip is the visual center of the account view.
+The strip spans the full lookback. It has one row per kind, month boundaries,
+and a caption stating what one mark covers.
+
+**As built it differs from what follows:** each row is a run of fixed buckets —
+one per five days at the default lookback, with a floor of 24 — rather than a
+tick per event, and long gaps are not drawn as shaded bands. The bucketed form
+is what has been in use; this paragraph records the difference rather than
+pretending it away.
+
+The part of the lookback outside the covered window is hatched and labeled
+either "not loaded (fetch limit reached)" or "before the account existed." The
+strip is the visual center of the account view.
 
 ## Data sources
 

@@ -30,8 +30,15 @@ unfollow-garden/
 │   │   │   ├── oauth.ts       # OAuth client, sign-in/restore/revoke, OwnerSession
 │   │   │   ├── client-config.ts    # the scope and the client metadata document
 │   │   │   ├── graph.ts       # follow records, profiles, follow-back status
+│   │   │   ├── status.ts      # repo status and PLC identity history, for dark accounts
+│   │   │   ├── links.ts       # how an account is named and where that name points
+│   │   │   ├── clients.ts     # the web clients links may open in, and what each names accounts by
+│   │   │   ├── richtext.ts    # links and mentions inside a bio, which carries no facets
 │   │   │   ├── activity.ts    # author feed, likes, events, covered window
 │   │   │   └── writes.ts      # the only authenticated writes: batched applyWrites
+│   │   ├── cost/
+│   │   │   ├── x-rates.ts     # X's dated rate card, and the bill line by line
+│   │   │   └── meter.svelte.ts # counts of what actually crossed the network
 │   │   ├── stats/
 │   │   │   └── activity-stats.ts   # the PRD's metric definitions, as pure functions
 │   │   ├── storage/
@@ -41,6 +48,8 @@ unfollow-garden/
 │   │   │   ├── session.svelte.ts   # phase, queue, decisions, undo, skip, settings
 │   │   │   ├── scanner.svelte.ts   # background activity loading, 4 at a time
 │   │   │   ├── swipe.ts            # the gesture: pure rules + a `use:swipe` action
+│   │   │   ├── identity.svelte.ts  # lazy lookup of who a dark account used to be
+│   │   │   ├── handles.svelte.ts   # bio handles resolved to DIDs, for DID-only clients
 │   │   │   └── runs.svelte.ts      # run creation, execution, resume, restore
 │   │   ├── format.ts          # shared number, date, and duration formatting
 │   │   ├── components/        # SignIn, Loading, AccountCard + parts, SwipeCard, TriageScreen + TriageActions, Review, Run, Settings
@@ -49,6 +58,7 @@ unfollow-garden/
 │   │   └── styles/
 │   │       ├── tokens.css     # project semantic tokens, in the `token` cascade layer
 │   │       └── layouts.css    # `l:stage`, the reading column, in the `layout` layer
+│   ├── hooks.server.ts        # Open Graph tags into the served shell, at build time
 │   ├── routes/
 │   │   ├── +layout.ts         # ssr = false — the app is client-rendered
 │   │   ├── +layout.svelte     # shell: global styles, favicon, the wordmark tab
@@ -99,7 +109,7 @@ Fragile: A run's targets are re-read from the owner's repo at start and again on
 For: What the user is deciding about, what they decided, and making sure a decision outlives the tab.
 Lives at: `src/lib/triage/session.svelte.ts`, `src/lib/storage/db.ts`, `src/lib/storage/backup.ts`, `src/lib/triage/swipe.ts`, `src/lib/components/SwipeCard.svelte`
 Why this shape: The IndexedDB schema matches the version 1 table in `PRD.md`. Database version 2 added the `activity` store; every upgrade step is additive, and a step may transform `decisions` or `runs` but never drop them.
-Seams: `TriageSession.advance` is where queue ordering lives, and `TriageSession.rank` is the whole of TRI-2. `saveDecision` writes the decision and its undo entry in one transaction, so the pair cannot come apart. `markDecided` is the runs-only path that deliberately skips the undo stack. `TriageSession.lastAction` is the single record of what the user just did, and the only thing the undo notice reads. In `swipe.ts`, `resolve` is the whole of what a released gesture means and `axisOf` the whole of which direction won — both pure, so the rules are tested without synthesising pointer events; `SwipeCard` owns only the card's position and the affordance, never a decision; `TriageScreen.commit` is the one place an outcome becomes a session call, which is the seam a flipped axis would land in and the reason it is tested with real pointer events rather than only through the geometry.
+Seams: `TriageSession.history` is the sitting's ordered record of what was done and the only trace of a skip, which never reaches storage; `lastAction` is the notice and must never be what undo depends on. `#acting` is the one guard stopping a second press acting on a subject the screen has not left. `TriageSession.advance` is where queue ordering lives, and `TriageSession.rank` is the whole of TRI-2. `saveDecision` writes the decision and its undo entry in one transaction, so the pair cannot come apart. `markDecided` is the runs-only path that deliberately skips the undo stack. `TriageSession.lastAction` is the single record of what the user just did, and the only thing the undo notice reads. In `swipe.ts`, `resolve` is the whole of what a released gesture means and `axisOf` the whole of which direction won — both pure, so the rules are tested without synthesising pointer events; `SwipeCard` owns only the card's position and the affordance, never a decision; `TriageScreen.commit` is the one place an outcome becomes a session call, which is the seam a flipped axis would land in and the reason it is tested with real pointer events rather than only through the geometry.
 Fragile: `current` is state, never derived from the queue. Deriving it would make the screen move on its own the moment a decision changed the queue, and would let background loading reorder the subject out from under the reader. Values written to IndexedDB must be plain objects — a `$state` proxy cannot be structured-cloned and throws on write. Skips are session-only by design and vanish on reload. **`undo` dispatches on `lastAction` before it pops the undo stack**, because a skip is not on that stack and popping unconditionally took back the decision made _before_ the skip. **The gesture shares the page with scrolling**: the surface keeps `touch-action: pan-y`, a downward drag means skip only at the top of the page, and the `pointermove` listener must stay `{ passive: false }` or `preventDefault` is a silent no-op. All of it is in `CONTEXT.md`.
 
 ### App shell and routes
@@ -109,6 +119,22 @@ Lives at: `src/routes/+layout.ts`, `src/routes/+layout.svelte`, `src/routes/+pag
 Why this shape: `+layout.ts` sets `ssr = false` for the whole app. Every screen reads from IndexedDB and the user's OAuth session, neither of which exists on a server — and rendering server-side would mean sending a server data the PRD says never leaves the browser.
 Seams: `+page.svelte` switches on `session.phase`, so a new screen is a new phase and a new branch. `src/app.css` is the single global-style entry point (the stylebase import plus app-wide rules). Keyboard triage is handled in `TriageScreen` on `svelte:window`, guarded against text fields and modifier keys.
 Fragile: `ssr = false` is a project-wide invariant, not a per-route convenience — a route that re-enables it is a privacy regression, not a performance tweak.
+
+### Links out
+
+For: Which account a link names, and which web client opens it.
+Lives at: `src/lib/atproto/clients.ts`, `src/lib/atproto/links.ts`, `src/lib/atproto/richtext.ts`, `src/lib/triage/handles.svelte.ts`
+Why this shape: atproto separates the data from the app that shows it, so the client someone reads in is a preference the network supports. The clients disagree about how a URL names an account, which is the whole reason `clients.ts` exists rather than a hostname in a setting.
+Seams: `WebClient.identifier` is the single statement of what a client needs; `resolve` in `clients.ts` is the only place a link falls back. `identityLink` is how every handle and DID on a card is named, and `parseBio` is the only place a bio's plain text becomes links.
+Fragile: **A profile description carries no facets** — a bio mention is a handle and nothing else, so a DID-only client needs a lookup before it can link one at all. A recent item's author is not always the subject. Cached links outlive the preference that built them and are rewritten by record key, not by host swap.
+
+### The cost comparison
+
+For: What this review would have cost bought from X, and why that figure can be trusted.
+Lives at: `src/lib/cost/x-rates.ts`, `src/lib/cost/meter.svelte.ts`, `src/lib/components/CostNote.svelte`, `src/lib/components/CostScreen.svelte`, the `meter` store in `db.ts`
+Why this shape: the rate card is separate from the counts so prices can be re-checked without rewriting anyone's history, and `costOf` is pure so the arithmetic is testable without a browser.
+Seams: `RATES` and `RATES_AS_OF` are the whole of what is claimed about someone else's prices. `costLines` is what makes the total checkable. Counting happens where the kind and the number are already known — `loadEverything` and `ActivityScanner.#loadOne` — and nowhere else.
+Fragile: **The figure is a public claim about another company's prices.** It counts only what crossed the network, seeds once from an existing cache so a used install does not report a review as free, and is deliberately conservative in three named places. Nothing is fetched from x.com at runtime.
 
 ### UI foundation
 
