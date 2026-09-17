@@ -62,3 +62,6 @@ tmp/
 # The exception is settings.local.json, which is per-person permission
 # grants rather than project policy — settings.json is the shared one.
 .claude/settings.local.json
+
+# Local tooling scratch, not part of the project.
+.poolside/

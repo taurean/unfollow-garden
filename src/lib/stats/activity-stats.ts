@@ -232,14 +232,36 @@ export function bucketEvents(
 }
 
 /** Month boundaries across the strip, as fractions of its width, for labelling. */
-export function monthTicks(
-	window: CoveredWindow,
-	lookbackDays: number
-): Array<{ label: string; offset: number }> {
+/**
+ * Past this point along the track, a left-anchored label runs off the end and
+ * is clipped to a fragment — "Septem" — which reads as a rendering fault
+ * rather than as a date. Such a label is anchored by its right edge instead.
+ */
+const ANCHOR_END_AFTER = 0.9;
+
+/**
+ * Roughly how much of the track a month's name takes up, as a fraction.
+ *
+ * An approximation, because the real width depends on the font, the container,
+ * and the length of the word — none of which a pure function over dates can
+ * see. It is deliberately a little generous: a dropped label costs a reader one
+ * date they can infer from its neighbours, and an overlapping pair costs them
+ * both.
+ */
+const LABEL_ROOM = 0.12;
+
+export interface MonthTick {
+	label: string;
+	offset: number;
+	/** Which edge of the label sits at `offset`. */
+	anchor: 'start' | 'end';
+}
+
+export function monthTicks(window: CoveredWindow, lookbackDays: number): MonthTick[] {
 	const end = Date.parse(window.end);
 	const start = end - lookbackDays * DAY_MS;
 	const span = end - start;
-	const ticks: Array<{ label: string; offset: number }> = [];
+	const ticks: MonthTick[] = [];
 
 	const cursor = new Date(start);
 	cursor.setDate(1);
@@ -248,11 +270,33 @@ export function monthTicks(
 	if (cursor.getTime() < start) cursor.setMonth(cursor.getMonth() + 1);
 
 	while (cursor.getTime() < end) {
+		const offset = (cursor.getTime() - start) / span;
 		ticks.push({
 			label: cursor.toLocaleDateString(undefined, { month: 'long' }),
-			offset: (cursor.getTime() - start) / span
+			offset,
+			anchor: offset > ANCHOR_END_AFTER ? 'end' : 'start'
 		});
 		cursor.setMonth(cursor.getMonth() + 1);
+	}
+
+	/*
+	 * An end-anchored label grows leftwards from the track's edge, back across
+	 * whatever sits before it — "August" and "September" ran together at every
+	 * width, because consecutive months are about a twelfth of the track apart
+	 * and a month's name is wider than that once it is pushed back from the
+	 * end.
+	 *
+	 * At a year's lookback this always happens: the first of the current month
+	 * is at most 31 days from the end, so the last label is never far enough
+	 * inside the track to hang from its left edge.
+	 *
+	 * Everything within a label's room of the last one goes. The most recent
+	 * month is the one kept, because it is what a reader is looking for when
+	 * they are deciding whether someone has only just gone quiet.
+	 */
+	const last = ticks.at(-1);
+	if (last?.anchor === 'end') {
+		return ticks.filter((tick) => tick === last || tick.offset <= last.offset - LABEL_ROOM);
 	}
 
 	return ticks;

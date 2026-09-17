@@ -4,7 +4,17 @@
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="text-scale" content="scale" />
-		%sveltekit.head%
+		<title>unfollow.garden</title>
+		<meta
+			name="description"
+			content="Review every account you follow, one at a time, and decide whether to keep following it. Your decisions stay in your browser."
+		/>
+		<!--
+			Filled in by `src/hooks.server.ts` at build time. A crawler does not
+			run the page, so anything in `svelte:head` is invisible to it — these
+			have to be in the HTML as served.
+		-->
+		%unfollow.meta% %sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">
 		<div style="display: contents">%sveltekit.body%</div>

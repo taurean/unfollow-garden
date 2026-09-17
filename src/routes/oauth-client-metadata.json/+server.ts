@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { buildClientMetadata } from '$lib/atproto/client-config';
+import { appOrigin, buildClientMetadata } from '$lib/atproto/client-config';
 
 /**
  * The client metadata document, written to a file at build time.
@@ -35,11 +35,9 @@ import { buildClientMetadata } from '$lib/atproto/client-config';
  */
 export const prerender = true;
 
-const PRODUCTION_ORIGIN = 'https://unfollow.garden';
-
 export const GET = () => {
 	// Prerendering runs in Node, so the build environment is readable here.
-	const origin = (process.env.PUBLIC_APP_ORIGIN || PRODUCTION_ORIGIN).replace(/\/$/, '');
+	const origin = appOrigin();
 
 	return json(buildClientMetadata(origin), {
 		headers: {

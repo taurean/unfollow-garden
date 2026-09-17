@@ -25,10 +25,47 @@
 		max-inline-size: var(--stage-width, var(--stage-max));
 		margin-inline: auto;
 
-		padding-block: var(--stage-leading, var(--space-2xl)) var(--stage-trailing, var(--space-3xl));
+		/*
+		 * The default leading is the offset the fixed utility bar uses too, so
+		 * a screen's first line — the triage counts, a back link — sits on the
+		 * same line as "Settings" and "Sign out" opposite it. A screen that
+		 * wants more room says so; one that does not gets the alignment for
+		 * free.
+		 */
+		padding-block: var(--stage-leading, var(--space-xl)) var(--stage-trailing, var(--space-3xl));
 
 		/* Start gutter clears the wordmark tab; end gutter is an ordinary margin. */
 		padding-inline: var(--space-2xl) var(--space-lg);
+	}
+
+	/*
+	 * The card's column grid.
+	 *
+	 * Twelve columns, the same set the design is drawn on, so rows of the
+	 * account card line up with each other instead of each row inventing its
+	 * own tracks. Before this, the header used `auto minmax(16rem, 1fr)
+	 * minmax(0, 1.4fr) auto` and nothing it contained shared an edge with the
+	 * summary or the strip below it.
+	 *
+	 * The column count drops with the viewport rather than the columns getting
+	 * narrower without limit: twelve slivers on a phone is not a grid, it is a
+	 * rounding error. Placement is by `span`, never by hard-coded line numbers,
+	 * so a block keeps its proportion at every width instead of being placed
+	 * into a column that no longer exists.
+	 */
+	.l\:columns {
+		display: grid;
+		grid-template-columns: repeat(var(--columns, 12), minmax(0, 1fr));
+		column-gap: var(--grid-gutter);
+		row-gap: var(--space-lg);
+		align-items: start;
+	}
+
+	/* wide */
+	@media (max-width: 60rem) {
+		.l\:columns {
+			--columns: 6;
+		}
 	}
 
 	/* phone — see the breakpoint note in tokens.css */
@@ -36,6 +73,10 @@
 		.l\:stage {
 			/* The wordmark is a band across the top here, so it needs no column. */
 			padding-inline: var(--space-lg);
+		}
+
+		.l\:columns {
+			--columns: 2;
 		}
 	}
 }

@@ -28,6 +28,15 @@ export interface RecentItem {
 	at: string;
 	/** Link to the post on Bluesky. */
 	url: string;
+	/**
+	 * The DID of whoever wrote the post, which is not always the subject — a
+	 * repost or a like points at someone else's.
+	 *
+	 * Carried because some web clients name an account by DID only and a URL
+	 * built from a handle would 404 there. Optional: entries cached before this
+	 * existed do not have it.
+	 */
+	authorDid?: string;
 	text: string;
 	/**
 	 * Who the item points at: the handle replied to, or the author of a post
@@ -348,6 +357,7 @@ async function assemble(
 			kind,
 			at,
 			url: permalink(item.post.uri, item.post.author.handle),
+			authorDid: item.post.author.did,
 			text: item.post.record.text ?? '',
 			// A repost's feed item carries the original author's post, so the
 			// attribution is the post's own author. A reply's is the parent's.
@@ -381,6 +391,7 @@ async function assemble(
 				kind: 'like',
 				at,
 				url: permalink(post.uri, post.author.handle),
+				authorDid: post.author.did,
 				text: post.record.text ?? '',
 				attribution: post.author.handle,
 				media: mediaNotes(post)

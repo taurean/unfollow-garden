@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { EVENT_KINDS, type ActivityEvent, type CoveredWindow } from '$lib/atproto/activity';
 	import { bucketEvents, monthTicks } from '$lib/stats/activity-stats';
+	import { duration } from '$lib/format';
 
 	let {
 		events,
@@ -22,6 +23,17 @@
 	const bucketCount = $derived(Math.max(24, Math.round(lookbackDays / DAYS_PER_BUCKET)));
 
 	const months = $derived(monthTicks(covered, lookbackDays));
+
+	/**
+	 * How much time one mark covers, derived rather than stated.
+	 *
+	 * The bucket count has a floor, so the span is only five days at the
+	 * lookbacks wide enough to need it — a 30-day lookback puts barely more
+	 * than a day in each. Hard-coding "5 days" would be wrong for every
+	 * setting but the default, and the whole point of saying it is that a
+	 * reader can tell a week's silence from a season's.
+	 */
+	const daysPerBucket = $derived(lookbackDays / bucketCount);
 
 	const rows = $derived(
 		EVENT_KINDS.map((kind) => ({
@@ -47,20 +59,25 @@
 				? 'before the account existed'
 				: null
 	);
+
+	/* Built as a string so the sentences keep their space between them. */
+	const scaleNote = $derived(
+		`Each mark is about ${duration(daysPerBucket)}.` +
+			(uncoveredReason && covered.reason !== 'lookback' ? ` Hatched: ${uncoveredReason}.` : '')
+	);
 </script>
 
 <div class="strip">
 	<div class="months" aria-hidden="true">
 		{#each months as month (month.offset)}
 			<!--
-				A label near the end is anchored by its right edge instead of its
-				left. `monthTicks` can place one within a few days of the window's
-				end, and left-anchored it runs past the track and is clipped to a
-				fragment — "Septem" — which is worse than either a shifted label
-				or none at all. The most recent month is also the one most worth
-				keeping, so it is nudged rather than dropped.
+				Which edge a label hangs from is decided in `monthTicks`, along
+				with dropping the one an end-anchored label would grow back
+				across. Both rules are about where a name fits on the track, and
+				splitting them between here and there is what let the two
+				collide for so long.
 			-->
-			{#if month.offset > 0.9}
+			{#if month.anchor === 'end'}
 				<span class="month" style="right: {(1 - month.offset) * 100}%">{month.label}</span>
 			{:else}
 				<span class="month" style="left: {month.offset * 100}%">{month.label}</span>
@@ -87,9 +104,14 @@
 		</div>
 	{/each}
 
-	{#if uncoveredReason && covered.reason !== 'lookback'}
-		<p class="uncovered-note">Hatched: {uncoveredReason}</p>
-	{/if}
+	<!--
+		The two sentences are joined with an explicit space. Svelte collapses the
+		indentation around a wrapped `{#if}` to nothing, and without it they ran
+		together as "5 days.Hatched:".
+	-->
+	<p class="scale-note">
+		{scaleNote}
+	</p>
 </div>
 
 <style>
@@ -158,13 +180,13 @@
 		}
 
 		.label,
-		.uncovered-note {
+		.scale-note {
 			font-family: var(--ff-ui);
 			font-size: var(--fs-0);
 			color: var(--ink-quiet);
 		}
 
-		.uncovered-note {
+		.scale-note {
 			margin: 0;
 		}
 

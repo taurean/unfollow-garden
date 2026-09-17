@@ -1,5 +1,6 @@
 <script lang="ts">
 	import AccountCard from '$lib/components/AccountCard.svelte';
+	import CostNote from '$lib/components/CostNote.svelte';
 	import RecentColumns from '$lib/components/RecentColumns.svelte';
 	import SwipeCard from '$lib/components/SwipeCard.svelte';
 	import TriageActions from '$lib/components/TriageActions.svelte';
@@ -18,6 +19,23 @@
 	);
 
 	const recent = $derived(activity.activity?.recent ?? []);
+
+	/*
+	 * Only accounts with nothing to show are looked up, and only once they are
+	 * the card on screen. A follow list can hold hundreds of dead accounts, and
+	 * probing them all in the background would be hundreds of requests to
+	 * third-party hosts to answer a question nobody has asked yet.
+	 */
+	$effect(() => {
+		const subject = session.current;
+		if (subject && !subject.profile) session.identities.probe(subject.subjectDid);
+	});
+
+	const identity = $derived(
+		session.current
+			? session.identities.get(session.current.subjectDid)
+			: { status: 'pending' as const, account: null, history: null, error: null }
+	);
 
 	/**
 	 * The last action, read once into a value the notice's body can narrow.
@@ -93,10 +111,25 @@
 	<header class="status u:fs-0 tabular">
 		<p>
 			<strong>{exact(session.remaining.length)}</strong> to review
+			{#if session.newSinceLastPass > 0}
+				<!-- Coming back to a reviewed list, the new follows are the
+				     whole reason for the second pass, so they get counted
+				     separately from the ones carried over. -->
+				· {exact(session.newSinceLastPass)} new
+			{/if}
 			{#if session.skippedCount > 0}
 				· {exact(session.skippedCount)} skipped
 			{/if}
-			· {exact(session.keptCount)} kept ·
+			·
+			{#if session.keptCount > 0}
+				<!-- The kept list is how a second pass gets audited without
+				     walking the whole queue again. -->
+				<Button data-variant="link" onclick={() => session.showKept()}>
+					{exact(session.keptCount)} kept
+				</Button>
+			{:else}
+				{exact(session.keptCount)} kept
+			{/if} ·
 			{#if session.markedCount > 0}
 				<!-- Reachable mid-queue, not only at the end: a few thousand
 				     accounts is several sittings, and a run should not have to
@@ -135,6 +168,10 @@
 				<AccountCard
 					subject={session.current}
 					{activity}
+					{identity}
+					isNew={session.isNewSinceLastPass(session.current)}
+					linkClient={session.settings.linkClient}
+					handles={session.handles}
 					lookbackDays={session.settings.lookbackDays}
 					thresholdDays={session.settings.thresholdDays}
 				/>
@@ -146,12 +183,18 @@
 			onundo={() => session.undo()}
 			lookbackDays={session.settings.lookbackDays}
 		/>
+
+		<CostNote counts={session.meter.counts} onexplain={() => session.showCost()} />
 	{/if}
 </section>
 
 {#if session.current?.profile && activity.status === 'ready'}
 	<section class="recent">
-		<RecentColumns {recent} />
+		<RecentColumns
+			{recent}
+			linkClient={session.settings.linkClient}
+			subjectDid={session.current.subjectDid}
+		/>
 	</section>
 {/if}
 
@@ -225,10 +268,13 @@
 		/*
 		 * The recent columns sit on their own surface below the fold. Everything
 		 * needed to decide is above it; this is for when that was not enough.
+		 *
+		 * The change of surface is the whole of the division — no rule across
+		 * the top. A line and a tonal step both say "new section", and saying
+		 * it twice is what makes a page look ruled rather than composed.
 		 */
 		.recent {
 			background-color: var(--surface-raised);
-			border-block-start: 1px solid var(--hue-z0-divider);
 			padding: var(--space-2xl) var(--space-lg) var(--space-2xl) var(--space-2xl);
 		}
 

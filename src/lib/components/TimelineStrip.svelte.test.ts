@@ -93,3 +93,38 @@ describe('the month labels', () => {
 		expect(visibleLabels(root)).toContain('September');
 	});
 });
+
+/**
+ * The scale caption.
+ *
+ * The strip's whole job is letting someone read a stretch of silence off it,
+ * which they cannot do without knowing what one mark is worth. The span is
+ * derived from the bucket count rather than stated, because the count has a
+ * floor and the answer stops being five days as soon as the lookback is narrow
+ * enough for that floor to bite.
+ */
+describe('the scale caption', () => {
+	it('says five days at the shipped default lookback', async () => {
+		const screen = render(TimelineStrip, {
+			props: { events: [], window: windowEnding('2026-09-14T12:00:00Z'), lookbackDays: 365 }
+		});
+
+		await expect.element(screen.getByText(/Each mark is about 5 days/)).toBeVisible();
+	});
+
+	it('does not say five days when the bucket floor has changed the answer', async () => {
+		// 30 days over a floor of 24 buckets is barely more than a day each.
+		const screen = render(TimelineStrip, {
+			props: { events: [], window: windowEnding('2026-09-14T12:00:00Z'), lookbackDays: 30 }
+		});
+
+		const text = screen.container.textContent ?? '';
+		expect({
+			mentionsFive: text.includes('about 5 days'),
+			hasCaption: text.includes('Each mark is about')
+		}).toEqual({
+			mentionsFive: false,
+			hasCaption: true
+		});
+	});
+});

@@ -22,7 +22,14 @@ export function exact(value: number): string {
 /** `February 21, 2015`. */
 export function longDate(iso: string | null | undefined): string {
 	if (!iso) return '—';
-	const ms = Date.parse(iso);
+
+	/*
+	 * A bare `YYYY-MM-DD` is a calendar date, not an instant. `Date.parse`
+	 * reads it as UTC midnight, so west of Greenwich it renders as the day
+	 * before — a rate card checked on the 17th reported as the 16th. Anything
+	 * carrying a time is a real instant and is localised as one.
+	 */
+	const ms = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? Date.parse(`${iso}T00:00:00`) : Date.parse(iso);
 	if (Number.isNaN(ms)) return '—';
 	return new Date(ms).toLocaleDateString(undefined, {
 		year: 'numeric',

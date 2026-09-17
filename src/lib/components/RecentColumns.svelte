@@ -1,8 +1,28 @@
 <script lang="ts">
 	import { EVENT_KINDS, type EventKind, type RecentItem } from '$lib/atproto/activity';
 	import { relative } from '$lib/format';
+	import { toClient } from '$lib/atproto/clients';
 
-	let { recent }: { recent: readonly RecentItem[] } = $props();
+	let {
+		recent,
+		linkClient,
+		subjectDid
+	}: { recent: readonly RecentItem[]; linkClient?: string; subjectDid?: string } = $props();
+
+	/**
+	 * Whose post a row actually points at.
+	 *
+	 * A post or a reply is the subject's own, so their DID — which the card
+	 * always knows — names the author. A repost or a like points at somebody
+	 * else, and only the item itself can say who.
+	 *
+	 * This matters because entries cached before author DIDs were stored have
+	 * none, and a client that names accounts by DID would send every one of
+	 * them to the wrong place, or fall back. Inferring the two kinds we can be
+	 * certain about fixes most of a cached list without refetching it.
+	 */
+	const authorOf = (item: RecentItem) =>
+		item.authorDid ?? (item.kind === 'post' || item.kind === 'reply' ? subjectDid : undefined);
 
 	const HEADING: Record<EventKind, string> = {
 		post: 'Posts',
@@ -51,7 +71,17 @@
 							<p class="meta u:fs-0">
 								<!-- rel="external": the URL is built at runtime, so the router
 							     cannot tell it leaves the app without being told. -->
-								<a href={item.url} target="_blank" rel="external noreferrer noopener">
+								<!--
+									Rewritten rather than read straight from the item: a
+									recent item is cached with its link already built, so
+									one stored before the preference changed still has to
+									follow it.
+								-->
+								<a
+									href={toClient(item.url, linkClient, authorOf(item))}
+									target="_blank"
+									rel="external noreferrer noopener"
+								>
 									{relative(item.at)}
 								</a>
 								{#each item.media as note (note)}

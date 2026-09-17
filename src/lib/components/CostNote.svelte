@@ -1,0 +1,72 @@
+<script lang="ts">
+	import { costOf, formatCost } from '$lib/cost/x-rates';
+	import type { MeterCounts } from '$lib/storage/db';
+
+	let { counts, onexplain }: { counts: MeterCounts; onexplain?: () => void } = $props();
+
+	const dollars = $derived(costOf(counts));
+</script>
+
+<!--
+	Hidden until the total is above zero. Nobody should be shown $0.00 before
+	they have done anything — the point is what a finished review cost, not a
+	counter that starts at nothing and dares you to watch it.
+-->
+{#if dollars > 0}
+	<p class="cost u:fs-0 u:lh-standard">
+		If this was X.com, loading your data would have cost
+		{#if onexplain}
+			<!--
+				The figure opens the breakdown rather than the rate card. A
+				number about someone else's prices should hand a reader its own
+				arithmetic first; the source is one step further in.
+			-->
+			<button type="button" class="figure" onclick={onexplain}>{formatCost(dollars)}</button>
+		{:else}
+			<span class="figure">{formatCost(dollars)}</span>
+		{/if}
+		— but because of AT Protocol it was free, which is the only reason this is possible. Inspired by
+		<a href="https://xbill.bisks.net" target="_blank" rel="external noreferrer noopener">xbill</a>.
+	</p>
+{/if}
+
+<style>
+	@layer layout {
+		.cost {
+			margin: 0;
+			font-family: var(--ff-ui);
+			color: var(--ink-quiet);
+			max-inline-size: 60ch;
+		}
+
+		/*
+		 * The figure is the only emphasised thing in the sentence, and it is
+		 * also the link to the rate card it came from — the number and its
+		 * source are the same target, so a reader checking the claim does not
+		 * have to hunt for where it came from.
+		 *
+		 * Colour is emphasis here, not meaning: the sentence says everything
+		 * without it.
+		 */
+		.figure {
+			color: var(--warn-ink);
+			font-weight: 600;
+			text-decoration: none;
+			font-variant-numeric: tabular-nums;
+			font: inherit;
+			font-weight: 600;
+			background: none;
+			border: none;
+			padding: 0;
+			cursor: pointer;
+		}
+
+		.figure:hover {
+			text-decoration: underline;
+		}
+
+		a:not(.figure) {
+			color: inherit;
+		}
+	}
+</style>

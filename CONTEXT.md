@@ -349,6 +349,93 @@ Worth generalising from: a test that passes should be run once against a
 deliberately broken version of the thing it covers. Both new tests on this
 surface were confirmed that way, and one of them needed rewriting because of it.
 
+## Undo is the seam that keeps breaking
+
+Two separate bugs, both reported as "undo stops working after one press", both
+with the same shape: the record of what happened did not match what happened.
+
+- **A second press inside one write decides the same subject twice.** A
+  decision reads the subject on screen, writes, and only then advances, so a
+  press arriving during the write still sees it. The decisions map hides the
+  duplicate — both writes land on one key — but the undo stack does not, and an
+  undo popping the duplicate deletes a decision that is already gone and
+  changes nothing on screen. `#acting` makes decide, skip, and undo refuse to
+  start while another is in flight.
+- **A skip is not on the persisted stack**, so the only record of one is in
+  memory. That record used to be `lastAction`, a single field, which undo
+  cleared — so the second undo fell through to the decision stack and, in a
+  sitting of nothing but skips, found it empty. The sitting keeps an ordered
+  `history` now, and `lastAction` is only the notice.
+
+**The notice is not the record.** `dismissLastAction` clears `lastAction`; it
+must never be the thing undo depends on, or closing a message costs you the
+action it described.
+
+**Write the test against the bug first.** The first regression test for the
+duplicate asserted on `decisions.size` and passed against the broken code,
+because a map keyed by subject reads the same whether it was written once or
+twice. Only an assertion on the stored undo stack catches it. Both fixes here
+were confirmed by reverting the fix and watching the tests fail.
+
+## Four ways a link can be wrong
+
+- **A profile description carries no facets.** A post's mention embeds the
+  mentioned account's DID; a bio is plain text, so links and `@handles` are
+  detected by pattern and a mention yields a handle and nothing else. A client
+  addressing accounts by DID needs that handle resolved first
+  (`handles.svelte.ts`).
+- **Clients disagree on how a URL names an account.** Bluesky takes either;
+  Blacksky (`blacksky.community`) takes a DID, prefix included. The wrong one is
+  a 404, not an error, so `WebClient` declares which identifier it needs and a
+  link without it falls back rather than being built wrong.
+- **A recent item's author is not always the subject.** A repost or a like
+  points at somebody else's post. Where `authorDid` is missing — entries cached
+  before it existed — a post or reply can borrow the subject's DID and a repost
+  or like cannot.
+- **A cached link outlives the preference that built it.** Recent items store
+  their URL assembled, so switching clients rewrites them by reading the record
+  key back out rather than swapping the host.
+
+## Three CSS rules that look equivalent and are not
+
+- **`aspect-ratio` only sizes an axis that is `auto`.** `width`/`height`
+  attributes on an `<img>` map to a presentational `height`, so swapping a fixed
+  `block-size` for `aspect-ratio` leaves the image stretched. Safe on a `<div>`,
+  which is why every avatar story missed it — the placeholder has no such
+  attribute and cannot reproduce it.
+- **A `<th>` with `display: flex` stops being a table cell**, so its border
+  leaves the table's border collapsing and each row draws two rules.
+- **`Date.parse` reads a bare `YYYY-MM-DD` as UTC midnight**, so west of
+  Greenwich it renders a day early. `longDate` treats a date-only string as a
+  calendar date and anything with a time as an instant.
+
+## Social-preview tags cannot come from a component
+
+`ssr = false` means `svelte:head` is applied in the browser, and a crawler does
+not run the page — it sees an empty head. The Open Graph tags are written into
+the served shell by `src/hooks.server.ts`, which runs at build time against the
+prerendered shell and puts no server in the request path.
+
+`og:image` and `og:url` must be absolute, so `PRODUCTION_ORIGIN` and
+`appOrigin()` live in `client-config.ts` beside the scope: the client metadata
+document and the preview card both name that origin and neither can ask the
+other.
+
+## The cost meter counts what crossed the network
+
+`activity.events` holds one entry per item fetched, not per item inside the
+covered window, which is what makes it a count of resources. A cache hit is not
+counted; `ActivityScanner.#loadOne` is the only place that can tell.
+
+An install used for weeks has everything cached and fetches nothing on the next
+load, so counting from zero would report a review of six hundred accounts as
+free. The meter seeds once from what storage already holds
+(`countStoredResources`), only while the stored counts are empty.
+
+The figure is a public claim about another company's prices. `RATES_AS_OF` is
+load-bearing, the breakdown names the endpoint behind each line, and the page
+says where it is deliberately conservative.
+
 ## Deliberately unresolved
 
 Recorded so nobody assumes these were settled and moved on:
@@ -362,7 +449,18 @@ Recorded so nobody assumes these were settled and moved on:
   open question 3.)
 - **The favicon.** `src/lib/assets/favicon.svg` is still the stock Svelte logo.
   Replacing it is a visual-contract decision, which the authoring boundaries
-  make human-owned.
+  make human-owned. `static/og-image.png` is the finished wordmark and is not a
+  substitute for it.
+- **`mu.social` as a link target.** `blacksky.community` and its DID-only URL
+  shape were confirmed by the author; `mu.social` was not. Neither the host nor
+  whether it mirrors `bsky.app`'s path shape has been checked against the live
+  site. If it is wrong it is one entry in `WEB_CLIENTS`.
+- **The wordmark tab's target size.** Narrower than the 24px WCAG 2.5.8 minimum
+  on a pointer device now that it is a button. Widening it is a decision about
+  the wordmark's proportions, which is human-owned.
+- **Undo across a run.** `markDecided` bypasses the undo stack and `forgetUndo`
+  strips run-deleted subjects from it. That seam has no test, because exercising
+  it means performing a real unfollow.
 - **`.env.example`.** Still lists the three `CLOUDFLARE_*` D1 credentials that
   `drizzle.config.ts` read before it was deleted. v0 needs no environment
   variables at all. The file is outside what the agent may read, so a human has

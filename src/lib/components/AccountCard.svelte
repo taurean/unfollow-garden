@@ -4,18 +4,29 @@
 	import TimelineStrip from '$lib/components/TimelineStrip.svelte';
 	import { computeStats } from '$lib/stats/activity-stats';
 	import type { ActivityState } from '$lib/triage/scanner.svelte';
+	import type { IdentityState } from '$lib/triage/identity.svelte';
+	import type { HandleResolver } from '$lib/triage/handles.svelte';
 	import type { FollowSnapshot } from '$lib/storage/db';
 
 	let {
 		subject,
 		activity,
 		lookbackDays,
-		thresholdDays
+		thresholdDays,
+		identity,
+		isNew = false,
+		linkClient,
+		handles
 	}: {
 		subject: FollowSnapshot;
 		activity: ActivityState;
 		lookbackDays: number;
 		thresholdDays: number;
+		/** Who this account used to be, when the app view has stopped answering. */
+		identity?: IdentityState;
+		isNew?: boolean;
+		linkClient?: string;
+		handles?: HandleResolver;
 	} = $props();
 
 	const loaded = $derived(activity.status === 'ready' ? activity.activity : null);
@@ -31,7 +42,7 @@
 </script>
 
 <article class="account">
-	<AccountHeader {subject} />
+	<AccountHeader {subject} {identity} {isNew} {linkClient} {handles} />
 
 	{#if subject.profile}
 		<ActivitySummary {subject} {stats} {lookbackDays} likesError={loaded?.likesError ?? null} />

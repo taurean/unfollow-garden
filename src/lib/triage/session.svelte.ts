@@ -16,6 +16,7 @@ import {
 } from '$lib/storage/backup';
 import {
 	DEFAULT_SETTINGS,
+	deleteDecisions,
 	deleteOwnerData,
 	loadRuns,
 	type RunRecord,
@@ -32,6 +33,9 @@ import {
 	type Settings
 } from '$lib/storage/db';
 import { ActivityScanner } from './scanner.svelte';
+import { IdentityProbe } from './identity.svelte';
+import { HandleResolver } from './handles.svelte';
+import { CostMeter } from '$lib/cost/meter.svelte';
 import { RunController } from './runs.svelte';
 
 export type Phase =
@@ -42,6 +46,10 @@ export type Phase =
 	| 'done'
 	/** Reviewing the marked list before anything is deleted (PRD, RUN-1). */
 	| 'review'
+	/** Browsing what has already been kept, so a later pass can be audited. */
+	| 'kept'
+	/** The cost comparison, broken down so it can be checked. */
+	| 'cost'
 	/** A run is in flight, or has just finished. */
 	| 'running'
 	/** Settings, past runs, backup, and delete-all. */
@@ -115,6 +123,45 @@ export class TriageSession {
 	 */
 	scanner = new ActivityScanner();
 
+	/**
+	 * Who an account used to be, for the ones with no profile to show.
+	 *
+	 * Lazy and per-subject, unlike the scanner: it answers a question only the
+	 * card currently on screen is asking (PRD, VIEW-2).
+	 */
+	identities = new IdentityProbe();
+
+	/**
+	 * Handles mentioned in bios, resolved to DIDs.
+	 *
+	 * Only consulted when the chosen web client addresses accounts by DID, and
+	 * cached for the sitting — the answer does not change.
+	 */
+	handles = new HandleResolver();
+
+	/**
+	 * True while a decision or an undo is being written.
+	 *
+	 * Every one of these reads the subject on screen, writes, and only then
+	 * moves on — so a second press arriving inside that window acts on a
+	 * subject the screen has not left yet. Two keeps on one account wrote it to
+	 * the undo stack twice, and the second undo popped an entry whose decision
+	 * was already gone, which looked like undo silently breaking after one use.
+	 *
+	 * A dropped keystroke inside a few milliseconds is a far smaller cost than
+	 * a stack that no longer describes what the user did.
+	 */
+	#acting = false;
+
+	/**
+	 * What this review has fetched, for the cost comparison.
+	 *
+	 * Counts only, and only resources that crossed the network — the rate card
+	 * that turns them into money lives in `$lib/cost/x-rates` and can change
+	 * without rewriting anyone's history.
+	 */
+	meter = new CostMeter();
+
 	/** Unfollow runs. Separate from triage because a run outlives the queue. */
 	runs = new RunController();
 
@@ -180,6 +227,21 @@ export class TriageSession {
 	 */
 	lastAction = $state<LastAction | null>(null);
 
+	/**
+	 * Everything done to a subject this sitting, oldest first.
+	 *
+	 * `lastAction` only ever held the most recent one, and it is cleared when
+	 * the notice is dismissed or the action is taken back — so a second undo
+	 * had nothing to dispatch on and fell through to the persisted decision
+	 * stack. Skips are not on that stack, by design, so skipping three accounts
+	 * and then undoing took back one and then silently did nothing.
+	 *
+	 * Session-only, like skips themselves (PRD, "Terms"). After a reload it is
+	 * empty and undo falls back to the persisted stack, which is what makes
+	 * decisions survive a closed tab while skips do not.
+	 */
+	private history: LastAction[] = [];
+
 	private actionSeq = 0;
 
 	undecided = $derived(this.subjects.filter((s) => !this.decisions.has(s.subjectDid)));
@@ -197,6 +259,26 @@ export class TriageSession {
 	 */
 	marked = $derived(
 		this.subjects.filter((s) => this.decisions.get(s.subjectDid)?.decision === 'unfollow')
+	);
+
+	/**
+	 * The subjects that were kept, most recently decided first.
+	 *
+	 * Ordered by when the call was made rather than alphabetically: coming back
+	 * after a sitting, the useful question is "what did I just decide", and the
+	 * answer is at the top.
+	 *
+	 * Read from the decision map for the same reason `marked` is — a decision
+	 * changed anywhere shows here without a second list to keep in step.
+	 */
+	kept = $derived(
+		this.subjects
+			.filter((s) => this.decisions.get(s.subjectDid)?.decision === 'keep')
+			.sort((a, b) =>
+				(this.decisions.get(b.subjectDid)?.decidedAt ?? '').localeCompare(
+					this.decisions.get(a.subjectDid)?.decidedAt ?? ''
+				)
+			)
 	);
 
 	private countOf(decision: Decision): number {
@@ -286,6 +368,7 @@ export class TriageSession {
 		this.skipped.clear();
 		this.current = null;
 		this.lastAction = null;
+		this.history = [];
 		this.error = null;
 		this.phase = 'signed-out';
 
@@ -320,6 +403,7 @@ export class TriageSession {
 
 		try {
 			this.settings = await loadSettings(session.did);
+			await this.meter.start(session.did);
 
 			this.decisions.clear();
 			for (const [subjectDid, record] of await loadDecisions(session.did)) {
@@ -368,11 +452,28 @@ export class TriageSession {
 					this.followBackError = cause instanceof Error ? cause.message : String(cause);
 				}
 
+				/*
+				 * Counted where the numbers already are. `follows` is the
+				 * owner's own repo, which X prices as an owned read; the other
+				 * two are lookups of other people and are priced as such.
+				 */
+				this.meter.record('follows', follows.length);
+				this.meter.record('profiles', profiles.size);
+				this.meter.record('relationships', followsOwner.size);
+
 				subjects = await saveFollows(session.did, follows, profiles, followsOwner);
 			}
 
 			this.subjects = subjects;
+			this.scanner.onFetched = ({ posts, likes }) => {
+				this.meter.record('posts', posts);
+				this.meter.record('likes', likes);
+				// Flushed per subject rather than per resource: a full review
+				// fetches tens of thousands of them.
+				void this.meter.flush();
+			};
 			this.scanner.start(subjects, this.settings.lookbackDays);
+			await this.meter.flush();
 
 			// An unfinished run outranks the queue: it already deleted records,
 			// and leaving it half-done is the one state the user cannot see.
@@ -422,12 +523,51 @@ export class TriageSession {
 		this.current = next ?? null;
 		this.phase = next ? 'triage' : 'done';
 		if (next) this.scanner.prioritize(next.subjectDid);
+		if (!next && this.skipped.size === 0) void this.completePass();
 	}
+
+	/**
+	 * Mark the moment the queue emptied with nothing left skipped.
+	 *
+	 * What makes a follow "new" on the next pass. Only a clean finish counts:
+	 * stopping with accounts still skipped is a sitting that ended, not a
+	 * review that finished, and dating the next pass from it would file the
+	 * skipped backlog under "new".
+	 */
+	private async completePass(): Promise<void> {
+		if (!this.session || this.subjects.length === 0) return;
+
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- read once, never held
+		const finishedAt = new Date().toISOString();
+		this.settings = { ...this.settings, lastPassCompletedAt: finishedAt };
+		await saveSettings($state.snapshot(this.settings));
+	}
+
+	/**
+	 * Followed since the user last finished a full pass.
+	 *
+	 * Before a first pass there is no such thing: everything is the backlog,
+	 * and badging all of it would say nothing. A follow with no parseable date
+	 * is not claimed to be new, because the honest answer is that we cannot
+	 * tell.
+	 */
+	isNewSinceLastPass(subject: FollowSnapshot): boolean {
+		const since = this.settings.lastPassCompletedAt;
+		if (!since || !subject.followedAt) return false;
+		return Date.parse(subject.followedAt) > Date.parse(since);
+	}
+
+	/** How many accounts in the queue arrived since the last finished pass. */
+	newSinceLastPass = $derived(
+		this.settings.lastPassCompletedAt
+			? this.undecided.filter((subject) => this.isNewSinceLastPass(subject)).length
+			: 0
+	);
 
 	/** Defer the subject on screen to the end of this sitting. */
 	skip(): void {
 		const subject = this.current;
-		if (!subject) return;
+		if (!subject || this.#acting) return;
 		this.skipped.add(subject.subjectDid);
 		this.noteAction('skip', subject);
 		this.advance();
@@ -449,6 +589,7 @@ export class TriageSession {
 				: 'an account that could not be loaded',
 			seq: ++this.actionSeq
 		};
+		this.history.push(this.lastAction);
 	}
 
 	/** Stop offering to take the last action back, without taking it back. */
@@ -459,6 +600,13 @@ export class TriageSession {
 	/** Put the skipped subjects back in the queue. */
 	reviewSkipped(): void {
 		this.skipped.clear();
+		/*
+		 * Those skips are undone — by this, all at once — so taking one back
+		 * afterwards would un-skip something already in the queue and jump the
+		 * reader to it for no reason.
+		 */
+		this.history = this.history.filter((action) => action.kind !== 'skip');
+		this.lastAction = null;
 		this.advance();
 	}
 
@@ -512,10 +660,46 @@ export class TriageSession {
 		this.decisions.clear();
 		this.skipped.clear();
 		this.lastAction = null;
+		this.history = [];
 		this.pastRuns = [];
 		this.runs.unfinished = null;
 		this.settings = { ownerDid: session.did, ...DEFAULT_SETTINGS };
+		this.meter.reset(session.did);
 		this.advance();
+	}
+
+	/**
+	 * Clear every decision and start the review again from the top.
+	 *
+	 * The narrow reset, and the one a user actually reaches for: it puts every
+	 * followed account back in the queue without touching the follow list, the
+	 * cached activity, the settings, or the run history.
+	 *
+	 * Accounts already unfollowed by a run do not come back. Their follow
+	 * records are gone from the repo, so the next load will not list them at
+	 * all, and the run that removed them is still the way back.
+	 */
+	async resetDecisions(): Promise<void> {
+		const session = this.session;
+		if (!session) return;
+
+		await deleteDecisions(session.did);
+		this.decisions.clear();
+		this.skipped.clear();
+		this.lastAction = null;
+		this.history = [];
+		this.identities = new IdentityProbe();
+
+		/*
+		 * Reloaded from the network, not from the snapshot.
+		 *
+		 * Starting the review again means looking at the accounts as they are
+		 * now: handles change, accounts go dark and come back, and a follow
+		 * list edited in another client has moved on. Re-reading the queue from
+		 * a snapshot taken weeks ago would start the pass over against stale
+		 * facts, which is the one thing a fresh pass is for.
+		 */
+		await this.loadEverything(session, { refetch: true });
 	}
 
 	/** Follow every account a past run unfollowed (PRD, RESTORE-1). */
@@ -526,6 +710,25 @@ export class TriageSession {
 		const subjectDids = run.targets.map((target) => target.subjectDid);
 		await this.runs.restore(session, run, subjectDids);
 		await this.refreshDecisions();
+	}
+
+	/**
+	 * Go back to the account on screen.
+	 *
+	 * What the wordmark does. On the only route in the app, "home" is a phase
+	 * change rather than a navigation, so this is not an anchor.
+	 *
+	 * The subject already on screen is kept when it is still undecided:
+	 * `advance` re-sorts the queue, and background loading will have moved
+	 * things since, so calling it unconditionally would swap the card for
+	 * someone else purely because the user came back from settings.
+	 */
+	home(): void {
+		if (this.current && !this.decisions.has(this.current.subjectDid)) {
+			this.phase = 'triage';
+			return;
+		}
+		this.advance();
 	}
 
 	/** Show the marked list, which is the last stop before anything is deleted. */
@@ -549,6 +752,30 @@ export class TriageSession {
 		if (!session) return;
 		const record = await saveDecision(session.did, subjectDid, 'keep');
 		this.decisions.set(subjectDid, record);
+	}
+
+	/**
+	 * Mark a kept subject for unfollow after all, from the kept list.
+	 *
+	 * The mirror of `keepInstead`, and it skips the undo stack for the same
+	 * reason: this is a correction made while reading a list, not a judgement
+	 * being walked back one subject at a time.
+	 */
+	async unfollowInstead(subjectDid: string): Promise<void> {
+		const session = this.session;
+		if (!session) return;
+		const record = await saveDecision(session.did, subjectDid, 'unfollow');
+		this.decisions.set(subjectDid, record);
+	}
+
+	/** Show everything kept so far, so a second pass can be audited. */
+	showKept(): void {
+		this.phase = 'kept';
+	}
+
+	/** Show the cost comparison line by line, so the figure can be checked. */
+	showCost(): void {
+		this.phase = 'cost';
 	}
 
 	/** Delete the follow records for every marked subject. */
@@ -592,7 +819,17 @@ export class TriageSession {
 		const subject = this.current;
 		const session = this.session;
 		if (!subject || !session) return;
+		if (this.#acting) return;
 
+		/*
+		 * Already decided means this is a second press on a subject the screen
+		 * has not moved off yet. Recording it again would put the same subject
+		 * on the undo stack twice, and the second undo would then pop an entry
+		 * whose decision is already gone and appear to do nothing.
+		 */
+		if (this.decisions.has(subject.subjectDid)) return;
+
+		this.#acting = true;
 		try {
 			const record = await saveDecision(session.did, subject.subjectDid, decision);
 			this.decisions.set(subject.subjectDid, record);
@@ -608,6 +845,8 @@ export class TriageSession {
 			this.advance();
 		} catch (cause) {
 			this.error = `Could not save that decision: ${cause instanceof Error ? cause.message : String(cause)}`;
+		} finally {
+			this.#acting = false;
 		}
 	}
 
@@ -620,11 +859,28 @@ export class TriageSession {
 	 * actually happened last is the only way "undo" means one thing.
 	 */
 	async undo(): Promise<void> {
-		if (this.lastAction?.kind === 'skip') {
-			const { subjectDid } = this.lastAction;
-			this.skipped.delete(subjectDid);
+		if (this.#acting) return;
+		this.#acting = true;
+		try {
+			await this.#undo();
+		} finally {
+			this.#acting = false;
+		}
+	}
+
+	async #undo(): Promise<void> {
+		/*
+		 * Dispatched on the sitting's history rather than on the notice, which
+		 * is cleared when it is dismissed. A skip never reaches storage, so the
+		 * only record that one happened is here.
+		 */
+		const last = this.history.at(-1);
+
+		if (last?.kind === 'skip') {
+			this.history.pop();
+			this.skipped.delete(last.subjectDid);
 			this.lastAction = null;
-			this.current = this.subjects.find((s) => s.subjectDid === subjectDid) ?? this.current;
+			this.current = this.subjects.find((s) => s.subjectDid === last.subjectDid) ?? this.current;
 			this.phase = 'triage';
 			return;
 		}
@@ -643,6 +899,7 @@ export class TriageSession {
 		this.decisions.delete(subjectDid);
 		this.skipped.delete(subjectDid);
 		this.lastAction = null;
+		if (this.history.at(-1)?.kind !== 'skip') this.history.pop();
 
 		this.current = this.subjects.find((s) => s.subjectDid === subjectDid) ?? this.current;
 		this.phase = 'triage';

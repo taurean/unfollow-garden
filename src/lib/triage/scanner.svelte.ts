@@ -70,6 +70,14 @@ export class ActivityScanner {
 	/** Set while a request is sleeping off a 429, so the header can say so. */
 	waitingOnRateLimit = $state(false);
 
+	/**
+	 * Told what a fetch actually pulled down, for the cost meter.
+	 *
+	 * A callback rather than a dependency, so the scanner keeps knowing nothing
+	 * about money and stays testable without one.
+	 */
+	onFetched?: (counts: { posts: number; likes: number }) => void;
+
 	constructor() {
 		onRateLimitWait((isWaiting) => {
 			this.waitingOnRateLimit = isWaiting;

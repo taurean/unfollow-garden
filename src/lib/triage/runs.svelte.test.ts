@@ -62,6 +62,7 @@ function subject(did: string, rkeys: string[]): FollowSnapshot {
 		followedAt: '2021-06-04T00:00:00Z',
 		followsOwner: null,
 		loadedAt: '2026-09-11T00:00:00Z',
+		profileMissingSince: null,
 		profile: { did, handle: `${did.split(':').pop()}.test`, displayName: 'Someone' }
 	};
 }

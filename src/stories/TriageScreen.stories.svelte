@@ -25,6 +25,7 @@
 		followedAt: '2021-06-04T00:00:00Z',
 		followsOwner: true,
 		loadedAt: '2026-09-11T00:00:00Z',
+		profileMissingSince: null,
 		profile: {
 			did: 'did:plc:alice',
 			handle: 'alice.bsky.social',
@@ -75,7 +76,13 @@
 		session.subjects = [subject];
 		session.current = subject;
 		session.phase = 'triage';
-		session.settings = { ownerDid: 'did:plc:owner', lookbackDays: 365, thresholdDays: 30 };
+		session.settings = {
+			ownerDid: 'did:plc:owner',
+			lookbackDays: 365,
+			thresholdDays: 30,
+			lastPassCompletedAt: null,
+			linkClient: 'bsky'
+		};
 		session.scanner.states.set('did:plc:alice', {
 			status: 'ready',
 			activity,

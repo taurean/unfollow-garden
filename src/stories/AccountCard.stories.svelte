@@ -18,7 +18,23 @@
 		followersCount: 4210,
 		followsCount: 380,
 		postsCount: 9134,
-		createdAt: '2019-03-02T00:00:00Z'
+		createdAt: '2019-03-02T00:00:00Z',
+		/*
+		 * A real avatar, inline so the story needs no network.
+		 *
+		 * A square source on purpose: an `<img>` carries a `height` attribute
+		 * that maps to a presentational height, which is enough to stop
+		 * `aspect-ratio` doing its job and leave the circle a stretched
+		 * rectangle. The placeholder `<div>` has no such attribute and cannot
+		 * catch it, so every avatar story before this one was testing the one
+		 * case that could not break.
+		 */
+		avatar:
+			'data:image/svg+xml;utf8,' +
+			encodeURIComponent(
+				'<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96">' +
+					'<rect width="96" height="96" fill="#e8833a"/></svg>'
+			)
 	};
 
 	const base = {
@@ -27,6 +43,7 @@
 		rkeys: ['aaa'],
 		followedAt: '2021-06-04T00:00:00Z',
 		followsOwner: null,
+		profileMissingSince: null,
 		loadedAt: '2026-09-11T00:00:00Z'
 	};
 
@@ -141,12 +158,143 @@
 	/>
 </Story>
 
-<!-- Deleted, deactivated, and suspended accounts have no profile but are still followed. -->
+<!--
+	Never loaded at all: an account already gone the first time it came up for
+	review. Nothing was cached, so the identity log is the only thing that can
+	say who this was.
+-->
 <Story name="Unavailable account" asChild>
 	<AccountCard
 		{...args}
-		subject={{ ...base, profile: null }}
+		subject={{ ...base, profile: null, profileMissingSince: '2026-09-11T00:00:00Z' }}
+		identity={{
+			status: 'ready',
+			account: { status: 'deactivated', activeSince: null },
+			history: {
+				handles: [
+					{ handle: 'alice.bsky.social', at: '2024-02-01T00:00:00Z' },
+					{ handle: 'alice.example.com', at: '2022-05-01T00:00:00Z' },
+					{ handle: 'a-old.bsky.social', at: '2021-06-01T00:00:00Z' }
+				],
+				hosts: [{ host: 'shiitake.us-east.host.bsky.network', at: '2023-01-01T00:00:00Z' }],
+				unavailable: false
+			},
+			error: null
+		}}
 		activity={{ status: 'pending', activity: null, error: null, lastActive: null } as ActivityState}
+	/>
+</Story>
+
+<!--
+	The case the carry-over exists for: reviewed before, deactivated since. The
+	name and bio are the last ones seen, and the card has to say so rather than
+	presenting a year-old profile as current.
+-->
+<Story name="Deactivated since the last review" asChild>
+	<AccountCard
+		{...args}
+		subject={{ ...base, profile, profileMissingSince: '2026-08-02T00:00:00Z' }}
+		identity={{
+			status: 'ready',
+			account: { status: 'deactivated', activeSince: null },
+			history: {
+				handles: [
+					{ handle: 'alice.bsky.social', at: '2024-02-01T00:00:00Z' },
+					{ handle: 'alice.example.com', at: '2022-05-01T00:00:00Z' }
+				],
+				hosts: [],
+				unavailable: false
+			},
+			error: null
+		}}
+		activity={ready({ events: [ev('post', 300)] })}
+	/>
+</Story>
+
+<!--
+	A `did:web` account: the identity method publishes no log, so "no earlier
+	names" is unknown rather than false, and the card says which.
+-->
+<Story name="Unavailable did:web account" asChild>
+	<AccountCard
+		{...args}
+		subject={{
+			...base,
+			subjectDid: 'did:web:alice.example.com',
+			profile: null,
+			profileMissingSince: '2026-09-11T00:00:00Z'
+		}}
+		identity={{
+			status: 'ready',
+			account: { status: 'suspended', activeSince: null },
+			history: { handles: [], hosts: [], unavailable: true },
+			error: null
+		}}
+		activity={{ status: 'pending', activity: null, error: null, lastActive: null } as ActivityState}
+	/>
+</Story>
+
+<!--
+	A handle that did not verify. The AppView returns the literal string
+	`handle.invalid`, which renders and links like a real handle unless it is
+	caught, so the DID is shown and linked to a DID browser instead.
+-->
+<Story name="Handle did not verify" asChild>
+	<AccountCard
+		{...args}
+		subject={{ ...base, profile: { ...profile, handle: 'handle.invalid' } }}
+		activity={ready({ events: busyEvents })}
+	/>
+</Story>
+
+<!--
+	Moderation labels, and the distinction that matters: a label the account put
+	on itself is a different fact from one a labeler applied.
+-->
+<Story name="Labelled account" asChild>
+	<AccountCard
+		{...args}
+		subject={{
+			...base,
+			profile: {
+				...profile,
+				labels: [
+					{ val: '!no-unauthenticated', src: 'did:plc:alice' },
+					{ val: 'graphic-media', src: 'did:plc:labeler' }
+				]
+			},
+			followsOwner: true
+		}}
+		activity={ready({ events: busyEvents })}
+	/>
+</Story>
+
+<!--
+	A bio with a link and a mention in it. Profile descriptions carry no facets,
+	so both are detected from the text rather than read from the record.
+-->
+<Story name="Bio with links and mentions" asChild>
+	<AccountCard
+		{...args}
+		subject={{
+			...base,
+			profile: {
+				...profile,
+				description:
+					'Pre-seed, seed, and development grants for projects in the AT Protocol ecosystem.\n\nFounded by @wang.social — see https://example.com/grants or www.example.org.\n\nMail me@example.com (not a mention).'
+			}
+		}}
+		activity={ready({ events: busyEvents })}
+	/>
+</Story>
+
+<!-- Followed since the last finished pass, which is why a second pass exists. -->
+<Story name="New since the last pass" asChild>
+	<AccountCard
+		{...args}
+		subject={{ ...base, profile }}
+		isNew
+		activity={ready({ events: busyEvents })}
 	/>
 </Story>
 

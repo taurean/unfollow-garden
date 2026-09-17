@@ -27,6 +27,21 @@
  */
 export const SCOPE = 'atproto repo:app.bsky.graph.follow?action=create&action=delete';
 
+/**
+ * Where this app is deployed.
+ *
+ * Here rather than beside the one route that used to hold it, because the
+ * client metadata and the page's own social-preview tags both have to name the
+ * same origin and neither can ask the other. `PUBLIC_APP_ORIGIN` overrides it
+ * for a preview deploy on another hostname.
+ */
+export const PRODUCTION_ORIGIN = 'https://unfollow.garden';
+
+/** The origin this build is for, trailing slash removed. */
+export function appOrigin(): string {
+	return (process.env.PUBLIC_APP_ORIGIN || PRODUCTION_ORIGIN).replace(/\/$/, '');
+}
+
 /** Shown on the consent screen next to the scope. */
 export const CLIENT_NAME = 'unfollow.garden';
 
