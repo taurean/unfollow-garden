@@ -233,10 +233,18 @@
 			grid-column: span 2;
 		}
 
+		/*
+		 * `block-size: auto` is load-bearing. The `width` and `height`
+		 * attributes on the image map to presentational `height: 96px`, and
+		 * `aspect-ratio` only sizes an axis that is `auto` — so without this
+		 * the avatar took the column's width and the attribute's height and
+		 * rendered as a stretched rounded rectangle rather than a circle.
+		 */
 		.avatar,
 		.avatar[data-state='empty'] {
 			inline-size: 100%;
 			max-inline-size: 5.5rem;
+			block-size: auto;
 			aspect-ratio: 1;
 			border-radius: var(--radius-pill);
 			object-fit: cover;

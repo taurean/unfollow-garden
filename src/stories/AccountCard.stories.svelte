@@ -18,7 +18,23 @@
 		followersCount: 4210,
 		followsCount: 380,
 		postsCount: 9134,
-		createdAt: '2019-03-02T00:00:00Z'
+		createdAt: '2019-03-02T00:00:00Z',
+		/*
+		 * A real avatar, inline so the story needs no network.
+		 *
+		 * A square source on purpose: an `<img>` carries a `height` attribute
+		 * that maps to a presentational height, which is enough to stop
+		 * `aspect-ratio` doing its job and leave the circle a stretched
+		 * rectangle. The placeholder `<div>` has no such attribute and cannot
+		 * catch it, so every avatar story before this one was testing the one
+		 * case that could not break.
+		 */
+		avatar:
+			'data:image/svg+xml;utf8,' +
+			encodeURIComponent(
+				'<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96">' +
+					'<rect width="96" height="96" fill="#e8833a"/></svg>'
+			)
 	};
 
 	const base = {

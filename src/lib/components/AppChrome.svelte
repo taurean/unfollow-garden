@@ -53,7 +53,7 @@
 {/if}
 
 {#if signedIn && showUtility}
-	<div class="utility">
+	<div class="[ utility ] [ l:stage ]">
 		<!--
 			Starting the review again is a normal thing to want after a sitting,
 			and it was reachable only from inside settings, next to the button
@@ -118,20 +118,50 @@
 			text-decoration: underline;
 		}
 
-		/* Pinned opposite the wordmark, out of the reading column entirely. */
+		/*
+		 * Pinned to the top, and ending where the content ends.
+		 *
+		 * The bar spans the viewport and carries the reading column's own
+		 * ceiling and end padding, so its last link lands on the same edge as
+		 * the text below it. Pinning to `right: 0` instead put the links
+		 * against the window on a wide screen, hundreds of pixels adrift of
+		 * everything they sit above.
+		 *
+		 * Centred the same way the stage is — `inset-inline: 0` with an auto
+		 * margin — rather than by arithmetic on `100vw`, which counts the
+		 * scrollbar the stage does not.
+		 */
 		.utility {
 			position: fixed;
 			top: 0;
-			right: 0;
+			inset-inline: 0;
+			/*
+			 * `l:stage` supplies the ceiling, the centring, and the inline
+			 * padding, so the last link lands on the same edge as the text
+			 * below it and cannot drift from it later. Only the block padding
+			 * is this bar's own — a fixed strip wants none of the reading
+			 * column's leading.
+			 */
+			padding-block: var(--space-sm);
 			/*
 			 * Above the wordmark tab, not level with it. On a phone the two
 			 * share one band and these links sit over its right end.
 			 */
 			z-index: var(--layer-bar);
 			display: flex;
+			justify-content: flex-end;
 			align-items: center;
 			gap: var(--space-lg);
-			padding: var(--space-sm) var(--space-lg);
+			/*
+			 * The bar is now as wide as the page, so only the links themselves
+			 * may take a click — otherwise an invisible strip would sit over
+			 * the top of every screen and swallow them.
+			 */
+			pointer-events: none;
+		}
+
+		.utility > :global(*) {
+			pointer-events: auto;
 		}
 
 		.utility :global(.button[data-variant='link']) {
@@ -196,6 +226,7 @@
 			.utility {
 				block-size: var(--top-band);
 				padding-block: 0;
+				padding-inline: var(--space-lg);
 				/*
 				 * Three controls share the band now, so the gap tightens rather
 				 * than letting the row wrap out of a fixed-height band and

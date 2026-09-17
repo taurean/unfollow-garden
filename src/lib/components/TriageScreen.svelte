@@ -250,10 +250,13 @@
 		/*
 		 * The recent columns sit on their own surface below the fold. Everything
 		 * needed to decide is above it; this is for when that was not enough.
+		 *
+		 * The change of surface is the whole of the division — no rule across
+		 * the top. A line and a tonal step both say "new section", and saying
+		 * it twice is what makes a page look ruled rather than composed.
 		 */
 		.recent {
 			background-color: var(--surface-raised);
-			border-block-start: 1px solid var(--hue-z0-divider);
 			padding: var(--space-2xl) var(--space-lg) var(--space-2xl) var(--space-2xl);
 		}
 
