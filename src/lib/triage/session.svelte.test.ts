@@ -46,7 +46,7 @@ function parkedSession() {
 
 async function wipe() {
 	const database = await db();
-	for (const store of ['decisions', 'undo', 'follows', 'runs', 'settings'] as const) {
+	for (const store of ['decisions', 'undo', 'follows', 'runs', 'settings', 'meter'] as const) {
 		await database.clear(store);
 	}
 }
@@ -134,5 +134,74 @@ describe('undo, when the last thing was a decision', () => {
 		await session.undo();
 
 		expect(session.lastAction).toBeNull();
+	});
+});
+
+describe('finishing a pass', () => {
+	it('records when the queue emptied, so a later pass can tell what is new', async () => {
+		await session.decide('keep');
+		await session.decide('keep');
+
+		expect(session.settings.lastPassCompletedAt).not.toBeNull();
+	});
+
+	it('does not record a sitting that ended with accounts still skipped', async () => {
+		// Stopping with a backlog is a sitting ending, not a review finishing.
+		// Dating the next pass from here would file the skipped ones as new.
+		await session.decide('keep');
+		session.skip();
+
+		expect(session.settings.lastPassCompletedAt).toBeNull();
+	});
+
+	it('treats nothing as new before a first pass has ever finished', () => {
+		// Everything is the backlog at that point, and badging all of it says
+		// nothing at all.
+		expect(session.isNewSinceLastPass(alice)).toBe(false);
+	});
+
+	it('counts a follow made after the last finished pass as new', async () => {
+		await session.decide('keep');
+		await session.decide('keep');
+
+		// A fixed date a day past the pass, rather than "now": the pass finishes
+		// in the same millisecond as the test runs, and the comparison is
+		// strictly-after.
+		const dayAfter = new Date(
+			Date.parse(session.settings.lastPassCompletedAt ?? '') + 86_400_000
+		).toISOString();
+		const fresh = { ...snapshot('did:plc:carol', 'Carol'), followedAt: dayAfter };
+		session.subjects = [...session.subjects, fresh];
+
+		expect(session.isNewSinceLastPass(fresh)).toBe(true);
+	});
+
+	it('does not claim a follow with no parseable date is new', async () => {
+		await session.decide('keep');
+		await session.decide('keep');
+
+		const undated = { ...snapshot('did:plc:dave', 'Dave'), followedAt: null };
+
+		expect(session.isNewSinceLastPass(undated)).toBe(false);
+	});
+});
+
+describe('the kept list', () => {
+	it('holds what was kept and not what was marked', async () => {
+		await session.decide('keep');
+		await session.decide('unfollow');
+
+		expect(session.kept.map((s) => s.subjectDid)).toEqual(['did:plc:alice']);
+	});
+
+	it('drops a subject that is marked for unfollow from the kept list', async () => {
+		await session.decide('keep');
+
+		await session.unfollowInstead('did:plc:alice');
+
+		expect({ kept: session.kept.length, marked: session.marked.length }).toEqual({
+			kept: 0,
+			marked: 1
+		});
 	});
 });

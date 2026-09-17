@@ -119,7 +119,16 @@
 			{#if session.skippedCount > 0}
 				· {exact(session.skippedCount)} skipped
 			{/if}
-			· {exact(session.keptCount)} kept ·
+			·
+			{#if session.keptCount > 0}
+				<!-- The kept list is how a second pass gets audited without
+				     walking the whole queue again. -->
+				<Button data-variant="link" onclick={() => session.showKept()}>
+					{exact(session.keptCount)} kept
+				</Button>
+			{:else}
+				{exact(session.keptCount)} kept
+			{/if} ·
 			{#if session.markedCount > 0}
 				<!-- Reachable mid-queue, not only at the end: a few thousand
 				     accounts is several sittings, and a run should not have to

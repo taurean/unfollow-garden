@@ -6,6 +6,7 @@
 	import ReviewScreen from '$lib/components/ReviewScreen.svelte';
 	import RunScreen from '$lib/components/RunScreen.svelte';
 	import SettingsScreen from '$lib/components/SettingsScreen.svelte';
+	import KeptScreen from '$lib/components/KeptScreen.svelte';
 	import AppChrome from '$lib/components/AppChrome.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 	import { exact } from '$lib/format';
@@ -55,6 +56,8 @@
 			<RunScreen {session} />
 		{:else if session.phase === 'settings'}
 			<SettingsScreen {session} />
+		{:else if session.phase === 'kept'}
+			<KeptScreen {session} />
 		{:else}
 			<section class="[ done ] [ l:stage ]">
 				<h1 class="u:fs-5">
@@ -73,6 +76,11 @@
 					{#if session.skippedCount > 0}
 						<Button data-variant="quiet" onclick={() => session.reviewSkipped()}>
 							Go back to {exact(session.skippedCount)} skipped
+						</Button>
+					{/if}
+					{#if session.keptCount > 0}
+						<Button data-variant="quiet" onclick={() => session.showKept()}>
+							See {exact(session.keptCount)} kept
 						</Button>
 					{/if}
 				</div>

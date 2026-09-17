@@ -44,6 +44,8 @@ export type Phase =
 	| 'done'
 	/** Reviewing the marked list before anything is deleted (PRD, RUN-1). */
 	| 'review'
+	/** Browsing what has already been kept, so a later pass can be audited. */
+	| 'kept'
 	/** A run is in flight, or has just finished. */
 	| 'running'
 	/** Settings, past runs, backup, and delete-all. */
@@ -207,6 +209,26 @@ export class TriageSession {
 	 */
 	marked = $derived(
 		this.subjects.filter((s) => this.decisions.get(s.subjectDid)?.decision === 'unfollow')
+	);
+
+	/**
+	 * The subjects that were kept, most recently decided first.
+	 *
+	 * Ordered by when the call was made rather than alphabetically: coming back
+	 * after a sitting, the useful question is "what did I just decide", and the
+	 * answer is at the top.
+	 *
+	 * Read from the decision map for the same reason `marked` is — a decision
+	 * changed anywhere shows here without a second list to keep in step.
+	 */
+	kept = $derived(
+		this.subjects
+			.filter((s) => this.decisions.get(s.subjectDid)?.decision === 'keep')
+			.sort((a, b) =>
+				(this.decisions.get(b.subjectDid)?.decidedAt ?? '').localeCompare(
+					this.decisions.get(a.subjectDid)?.decidedAt ?? ''
+				)
+			)
 	);
 
 	private countOf(decision: Decision): number {
@@ -639,6 +661,25 @@ export class TriageSession {
 		if (!session) return;
 		const record = await saveDecision(session.did, subjectDid, 'keep');
 		this.decisions.set(subjectDid, record);
+	}
+
+	/**
+	 * Mark a kept subject for unfollow after all, from the kept list.
+	 *
+	 * The mirror of `keepInstead`, and it skips the undo stack for the same
+	 * reason: this is a correction made while reading a list, not a judgement
+	 * being walked back one subject at a time.
+	 */
+	async unfollowInstead(subjectDid: string): Promise<void> {
+		const session = this.session;
+		if (!session) return;
+		const record = await saveDecision(session.did, subjectDid, 'unfollow');
+		this.decisions.set(subjectDid, record);
+	}
+
+	/** Show everything kept so far, so a second pass can be audited. */
+	showKept(): void {
+		this.phase = 'kept';
 	}
 
 	/** Delete the follow records for every marked subject. */
