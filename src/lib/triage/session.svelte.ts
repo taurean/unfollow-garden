@@ -140,6 +140,20 @@ export class TriageSession {
 	handles = new HandleResolver();
 
 	/**
+	 * True while a decision or an undo is being written.
+	 *
+	 * Every one of these reads the subject on screen, writes, and only then
+	 * moves on — so a second press arriving inside that window acts on a
+	 * subject the screen has not left yet. Two keeps on one account wrote it to
+	 * the undo stack twice, and the second undo popped an entry whose decision
+	 * was already gone, which looked like undo silently breaking after one use.
+	 *
+	 * A dropped keystroke inside a few milliseconds is a far smaller cost than
+	 * a stack that no longer describes what the user did.
+	 */
+	#acting = false;
+
+	/**
 	 * What this review has fetched, for the cost comparison.
 	 *
 	 * Counts only, and only resources that crossed the network — the rate card
@@ -537,7 +551,7 @@ export class TriageSession {
 	/** Defer the subject on screen to the end of this sitting. */
 	skip(): void {
 		const subject = this.current;
-		if (!subject) return;
+		if (!subject || this.#acting) return;
 		this.skipped.add(subject.subjectDid);
 		this.noteAction('skip', subject);
 		this.advance();
@@ -779,7 +793,17 @@ export class TriageSession {
 		const subject = this.current;
 		const session = this.session;
 		if (!subject || !session) return;
+		if (this.#acting) return;
 
+		/*
+		 * Already decided means this is a second press on a subject the screen
+		 * has not moved off yet. Recording it again would put the same subject
+		 * on the undo stack twice, and the second undo would then pop an entry
+		 * whose decision is already gone and appear to do nothing.
+		 */
+		if (this.decisions.has(subject.subjectDid)) return;
+
+		this.#acting = true;
 		try {
 			const record = await saveDecision(session.did, subject.subjectDid, decision);
 			this.decisions.set(subject.subjectDid, record);
@@ -795,6 +819,8 @@ export class TriageSession {
 			this.advance();
 		} catch (cause) {
 			this.error = `Could not save that decision: ${cause instanceof Error ? cause.message : String(cause)}`;
+		} finally {
+			this.#acting = false;
 		}
 	}
 
@@ -807,6 +833,16 @@ export class TriageSession {
 	 * actually happened last is the only way "undo" means one thing.
 	 */
 	async undo(): Promise<void> {
+		if (this.#acting) return;
+		this.#acting = true;
+		try {
+			await this.#undo();
+		} finally {
+			this.#acting = false;
+		}
+	}
+
+	async #undo(): Promise<void> {
 		if (this.lastAction?.kind === 'skip') {
 			const { subjectDid } = this.lastAction;
 			this.skipped.delete(subjectDid);

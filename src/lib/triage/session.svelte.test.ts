@@ -205,3 +205,64 @@ describe('the kept list', () => {
 		});
 	});
 });
+
+/**
+ * Two presses inside one write.
+ *
+ * Every decision reads the subject on screen, writes it, and only then moves
+ * on. A press arriving inside that window still sees the same subject — and
+ * writing it twice put it on the undo stack twice. The decisions map hides
+ * that, because both writes land on one key; the stack does not, and the
+ * second undo popped an entry whose decision was already gone and appeared to
+ * do nothing at all.
+ */
+describe('acting twice before the screen has moved', () => {
+	const settle = () => new Promise((resolve) => setTimeout(resolve, 30));
+
+	/** The undo stack as stored, which is the thing that went wrong. */
+	async function stack(): Promise<string[]> {
+		return (await (await db()).get('undo', 'did:plc:owner'))?.subjectDids ?? [];
+	}
+
+	it('puts the subject on the undo stack once, however many times it was pressed', async () => {
+		void session.decide('keep');
+		void session.decide('keep');
+		await settle();
+
+		expect(await stack()).toEqual(['did:plc:alice']);
+	});
+
+	it('leaves no entry behind that would make a later undo do nothing', async () => {
+		// The symptom: an undo that pops a subject whose decision is already
+		// gone changes nothing on screen, so undo looks broken from that press
+		// onward.
+		void session.decide('keep');
+		void session.decide('keep');
+		await settle();
+		await session.decide('keep');
+
+		expect(await stack()).toEqual(['did:plc:alice', 'did:plc:bob']);
+	});
+
+	it('keeps undoing, one decision at a time, for as many as were made', async () => {
+		await session.decide('keep');
+		await session.decide('keep');
+
+		await session.undo();
+		const afterFirst = session.decisions.size;
+		await session.undo();
+
+		expect({ afterFirst, afterSecond: session.decisions.size }).toEqual({
+			afterFirst: 1,
+			afterSecond: 0
+		});
+	});
+
+	it('ignores a skip that lands while a decision is still being written', async () => {
+		void session.decide('keep');
+		session.skip();
+		await settle();
+
+		expect(session.skippedCount).toBe(0);
+	});
+});
