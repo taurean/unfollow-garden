@@ -26,6 +26,15 @@
 		 * it occupies that line's place and should carry its weight, which is
 		 * almost none.
 		 */
+		/*
+		 * A flex box, so the button is not sitting on the wrapper's text
+		 * baseline — inline, it hung two pixels below the utility links it is
+		 * meant to line up with.
+		 */
+		.back {
+			display: flex;
+		}
+
 		.back :global(.button[data-variant='link']) {
 			gap: var(--space-2xs);
 			padding: 0;

@@ -25,7 +25,14 @@
 		max-inline-size: var(--stage-width, var(--stage-max));
 		margin-inline: auto;
 
-		padding-block: var(--stage-leading, var(--space-2xl)) var(--stage-trailing, var(--space-3xl));
+		/*
+		 * The default leading is the offset the fixed utility bar uses too, so
+		 * a screen's first line — the triage counts, a back link — sits on the
+		 * same line as "Settings" and "Sign out" opposite it. A screen that
+		 * wants more room says so; one that does not gets the alignment for
+		 * free.
+		 */
+		padding-block: var(--stage-leading, var(--space-xl)) var(--stage-trailing, var(--space-3xl));
 
 		/* Start gutter clears the wordmark tab; end gutter is an ordinary margin. */
 		padding-inline: var(--space-2xl) var(--space-lg);

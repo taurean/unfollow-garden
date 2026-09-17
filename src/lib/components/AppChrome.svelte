@@ -142,7 +142,7 @@
 			 * is this bar's own — a fixed strip wants none of the reading
 			 * column's leading.
 			 */
-			padding-block: var(--space-sm);
+			padding-block: var(--space-xl) var(--space-sm);
 			/*
 			 * Above the wordmark tab, not level with it. On a phone the two
 			 * share one band and these links sit over its right end.

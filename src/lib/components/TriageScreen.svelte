@@ -189,7 +189,11 @@
 
 {#if session.current?.profile && activity.status === 'ready'}
 	<section class="recent">
-		<RecentColumns {recent} linkClient={session.settings.linkClient} />
+		<RecentColumns
+			{recent}
+			linkClient={session.settings.linkClient}
+			subjectDid={session.current.subjectDid}
+		/>
 	</section>
 {/if}
 
