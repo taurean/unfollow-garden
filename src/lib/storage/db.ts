@@ -426,6 +426,8 @@ export async function countStoredResources(
 			if (event.kind === 'like') likes++;
 			else posts++;
 		}
+		// The liked posts whose text the card shows are post reads too.
+		for (const item of activity.recent) if (item.kind === 'like') posts++;
 	}
 
 	return {

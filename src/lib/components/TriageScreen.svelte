@@ -182,7 +182,7 @@
 			lookbackDays={session.settings.lookbackDays}
 		/>
 
-		<CostNote counts={session.meter.counts} />
+		<CostNote counts={session.meter.counts} onexplain={() => session.showCost()} />
 	{/if}
 </section>
 

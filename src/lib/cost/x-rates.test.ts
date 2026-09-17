@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { costOf, formatCost, RATES, RATES_AS_OF } from './x-rates';
+import { costLines, costOf, formatCost, formatRate, RATES, RATES_AS_OF } from './x-rates';
 
 const NOTHING = { follows: 0, profiles: 0, relationships: 0, posts: 0, likes: 0 };
 
@@ -61,5 +61,61 @@ describe('the rate card', () => {
 		// X replaced monthly tiers with pay-per-resource. A figure quoting
 		// someone else's prices needs to say when it was last true.
 		expect(RATES_AS_OF).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+	});
+});
+
+/**
+ * The breakdown.
+ *
+ * The figure is a public claim about another company's prices, so the thing
+ * that makes it trustworthy is that a reader can add it up themselves. These
+ * check the arithmetic the screen shows is the arithmetic `costOf` does.
+ */
+describe('costLines', () => {
+	const counts = { follows: 641, profiles: 641, relationships: 641, posts: 256000, likes: 192000 };
+
+	it('adds up to the same total the sentence quotes', () => {
+		const lines = costLines(counts);
+
+		expect(lines.reduce((sum, line) => sum + line.subtotal, 0)).toBeCloseTo(costOf(counts), 6);
+	});
+
+	it('puts the largest cost first, because that is what a reader is checking', () => {
+		const subtotals = costLines(counts).map((line) => line.subtotal);
+
+		expect([...subtotals].sort((a, b) => b - a)).toEqual(subtotals);
+	});
+
+	it('leaves out a resource that was never fetched', () => {
+		const lines = costLines({ ...counts, likes: 0 });
+
+		expect(lines.map((line) => line.kind)).not.toContain('likes');
+	});
+
+	it('names the endpoint each line came from, so it can be checked against the code', () => {
+		expect(costLines(counts).every((line) => line.source.length > 0)).toBe(true);
+	});
+
+	it('prices a review the size of a real follow list in the hundreds, not the millions', () => {
+		// A sanity floor and ceiling. Each account contributes at most 500 feed
+		// items and 500 likes, so a thousand-account review cannot plausibly
+		// leave this range — a figure outside it means the counting is wrong,
+		// not that the prices are surprising.
+		const thousand = {
+			follows: 1000,
+			profiles: 1000,
+			relationships: 1000,
+			posts: 1000 * 500,
+			likes: 1000 * 500
+		};
+
+		expect(costOf(thousand)).toBeLessThan(5000);
+		expect(costOf(thousand)).toBeGreaterThan(100);
+	});
+});
+
+describe('formatRate', () => {
+	it('shows a tenth of a cent, which three of the five rates need', () => {
+		expect(formatRate(0.001)).toBe('$0.001');
 	});
 });

@@ -2,7 +2,7 @@
 	import { costOf, formatCost } from '$lib/cost/x-rates';
 	import type { MeterCounts } from '$lib/storage/db';
 
-	let { counts }: { counts: MeterCounts } = $props();
+	let { counts, onexplain }: { counts: MeterCounts; onexplain?: () => void } = $props();
 
 	const dollars = $derived(costOf(counts));
 </script>
@@ -15,12 +15,17 @@
 {#if dollars > 0}
 	<p class="cost u:fs-0 u:lh-standard">
 		Doing this on x.com would have cost unfollow.garden
-		<a
-			class="figure"
-			href="https://docs.x.com/x-api/getting-started/pricing"
-			target="_blank"
-			rel="external noreferrer noopener">{formatCost(dollars)}</a
-		>. On AT Protocol it was free. Inspired by
+		{#if onexplain}
+			<!--
+				The figure opens the breakdown rather than the rate card. A
+				number about someone else's prices should hand a reader its own
+				arithmetic first; the source is one step further in.
+			-->
+			<button type="button" class="figure" onclick={onexplain}>{formatCost(dollars)}</button>
+		{:else}
+			<span class="figure">{formatCost(dollars)}</span>
+		{/if}
+		. On AT Protocol it was free. Inspired by
 		<a href="https://xbill.bisks.net" target="_blank" rel="external noreferrer noopener">xbill</a>.
 	</p>
 {/if}
@@ -48,6 +53,12 @@
 			font-weight: 600;
 			text-decoration: none;
 			font-variant-numeric: tabular-nums;
+			font: inherit;
+			font-weight: 600;
+			background: none;
+			border: none;
+			padding: 0;
+			cursor: pointer;
 		}
 
 		.figure:hover {

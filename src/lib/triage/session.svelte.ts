@@ -47,6 +47,8 @@ export type Phase =
 	| 'review'
 	/** Browsing what has already been kept, so a later pass can be audited. */
 	| 'kept'
+	/** The cost comparison, broken down so it can be checked. */
+	| 'cost'
 	/** A run is in flight, or has just finished. */
 	| 'running'
 	/** Settings, past runs, backup, and delete-all. */
@@ -637,7 +639,18 @@ export class TriageSession {
 		this.decisions.clear();
 		this.skipped.clear();
 		this.lastAction = null;
-		this.advance();
+		this.identities = new IdentityProbe();
+
+		/*
+		 * Reloaded from the network, not from the snapshot.
+		 *
+		 * Starting the review again means looking at the accounts as they are
+		 * now: handles change, accounts go dark and come back, and a follow
+		 * list edited in another client has moved on. Re-reading the queue from
+		 * a snapshot taken weeks ago would start the pass over against stale
+		 * facts, which is the one thing a fresh pass is for.
+		 */
+		await this.loadEverything(session, { refetch: true });
 	}
 
 	/** Follow every account a past run unfollowed (PRD, RESTORE-1). */
@@ -709,6 +722,11 @@ export class TriageSession {
 	/** Show everything kept so far, so a second pass can be audited. */
 	showKept(): void {
 		this.phase = 'kept';
+	}
+
+	/** Show the cost comparison line by line, so the figure can be checked. */
+	showCost(): void {
+		this.phase = 'cost';
 	}
 
 	/** Delete the follow records for every marked subject. */

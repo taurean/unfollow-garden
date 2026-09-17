@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import CostNote from './CostNote.svelte';
 
@@ -28,12 +28,26 @@ describe('the cost note', () => {
 		await expect.element(screen.getByText('$154.04')).toBeVisible();
 	});
 
-	it('links the figure to the rate card it came from', async () => {
+	it('opens the breakdown from the figure, so the number can be taken apart', async () => {
+		// A claim about someone else's prices should hand a reader its own
+		// arithmetic before it hands them the source.
+		const onexplain = vi.fn();
+		const screen = render(CostNote, {
+			props: { counts: { ...NOTHING, profiles: 100 }, onexplain }
+		});
+
+		await screen.getByRole('button', { name: '$1.00' }).click();
+
+		expect(onexplain).toHaveBeenCalledOnce();
+	});
+
+	it('states the figure without offering a breakdown when there is nowhere to go', async () => {
 		const screen = render(CostNote, { props: { counts: { ...NOTHING, profiles: 100 } } });
 
-		expect(screen.container.querySelector('.figure')?.getAttribute('href')).toBe(
-			'https://docs.x.com/x-api/getting-started/pricing'
-		);
+		expect({
+			text: screen.container.textContent?.includes('$1.00'),
+			button: screen.container.querySelector('button')
+		}).toEqual({ text: true, button: null });
 	});
 
 	it('credits xbill, which is where the comparison comes from', async () => {

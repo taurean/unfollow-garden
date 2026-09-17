@@ -8,6 +8,7 @@
 	import SettingsScreen from '$lib/components/SettingsScreen.svelte';
 	import KeptScreen from '$lib/components/KeptScreen.svelte';
 	import CostNote from '$lib/components/CostNote.svelte';
+	import CostScreen from '$lib/components/CostScreen.svelte';
 	import AppChrome from '$lib/components/AppChrome.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 	import { exact } from '$lib/format';
@@ -59,6 +60,8 @@
 			<SettingsScreen {session} />
 		{:else if session.phase === 'kept'}
 			<KeptScreen {session} />
+		{:else if session.phase === 'cost'}
+			<CostScreen {session} />
 		{:else}
 			<section class="[ done ] [ l:stage ]">
 				<h1 class="u:fs-5">
@@ -86,7 +89,7 @@
 					{/if}
 				</div>
 
-				<CostNote counts={session.meter.counts} />
+				<CostNote counts={session.meter.counts} onexplain={() => session.showCost()} />
 			</section>
 		{/if}
 	{/if}

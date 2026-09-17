@@ -64,6 +64,61 @@ export function costOf(counts: Omit<MeterCounts, 'ownerDid'>): number {
 	);
 }
 
+/** One line of the bill, so the figure can be checked rather than believed. */
+export interface CostLine {
+	kind: keyof Omit<MeterCounts, 'ownerDid'>;
+	/** What was read, in the app's own terms. */
+	label: string;
+	/** Which endpoint it came from, so a reader can go and look. */
+	source: string;
+	count: number;
+	rate: number;
+	subtotal: number;
+}
+
+const LABELS: Record<CostLine['kind'], { label: string; source: string }> = {
+	follows: {
+		label: 'Your own follow records',
+		source: 'com.atproto.repo.listRecords on your PDS · priced as X’s owned read'
+	},
+	profiles: {
+		label: 'Profiles',
+		source: 'app.bsky.actor.getProfiles · one per account you follow'
+	},
+	relationships: {
+		label: 'Follow-back checks',
+		source: 'app.bsky.graph.getRelationships · one per account you follow'
+	},
+	posts: {
+		label: 'Posts, replies and reposts',
+		source: 'app.bsky.feed.getAuthorFeed, plus the liked posts shown on each card'
+	},
+	likes: {
+		label: 'Likes',
+		source: 'com.atproto.repo.listRecords on each account’s PDS'
+	}
+};
+
+/**
+ * The bill, line by line, largest first.
+ *
+ * The whole point of publishing a figure about someone else's prices is that a
+ * reader can take it apart. Lines with a zero count are dropped: they say
+ * nothing and make the ones that matter harder to find.
+ */
+export function costLines(counts: Omit<MeterCounts, 'ownerDid'>): CostLine[] {
+	return (Object.keys(RATES) as Array<CostLine['kind']>)
+		.map((kind) => ({
+			kind,
+			...LABELS[kind],
+			count: counts[kind],
+			rate: RATES[kind],
+			subtotal: counts[kind] * RATES[kind]
+		}))
+		.filter((line) => line.count > 0)
+		.sort((a, b) => b.subtotal - a.subtotal);
+}
+
 /**
  * The bill as money.
  *
@@ -77,4 +132,14 @@ export function formatCost(dollars: number): string {
 		currency: 'USD',
 		maximumFractionDigits: 2
 	});
+}
+
+/**
+ * The rate as money, which needs more decimals than a total does.
+ *
+ * A tenth of a cent is a real price here, and rounding it to the cent would
+ * make three of the five rates look identical.
+ */
+export function formatRate(dollars: number): string {
+	return `$${dollars.toFixed(3)}`;
 }
