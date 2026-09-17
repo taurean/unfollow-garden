@@ -392,6 +392,51 @@ export async function saveCounts(counts: MeterCounts): Promise<void> {
 	await (await db()).put('meter', counts);
 }
 
+/**
+ * What this owner's stored data says was already fetched, before counting began.
+ *
+ * The meter counts resources as they cross the network, which leaves an install
+ * that has been used for weeks reading zero: its follows and its activity are
+ * all cached, so a new session fetches nothing and the figure understates the
+ * work by everything that ever happened.
+ *
+ * Every resource counted here really was fetched over the network by this app —
+ * a cached profile is one that was loaded once, an event in the activity cache
+ * came down in a page of a feed. The cache is the record of that, so it is read
+ * once to set the starting point, rather than pretending the history was free.
+ *
+ * One profile and one follow-back lookup per subject, because that is exactly
+ * what a load does (`getProfiles` and `getRelationships`, once each per
+ * subject, batched). Activity is read for the subjects this owner follows, so
+ * a shared cache entry for someone they do not follow is not counted against
+ * them.
+ */
+export async function countStoredResources(
+	ownerDid: string
+): Promise<Omit<MeterCounts, 'ownerDid'>> {
+	const database = await db();
+	const follows = await database.getAllFromIndex('follows', 'byOwner', ownerDid);
+
+	let posts = 0;
+	let likes = 0;
+	for (const snapshot of follows) {
+		const activity = await database.get('activity', snapshot.subjectDid);
+		if (!activity) continue;
+		for (const event of activity.events) {
+			if (event.kind === 'like') likes++;
+			else posts++;
+		}
+	}
+
+	return {
+		follows: follows.reduce((total, snapshot) => total + snapshot.rkeys.length, 0),
+		profiles: follows.filter((snapshot) => snapshot.profile).length,
+		relationships: follows.filter((snapshot) => snapshot.followsOwner !== null).length,
+		posts,
+		likes
+	};
+}
+
 export async function saveSettings(settings: Settings): Promise<void> {
 	await (await db()).put('settings', settings);
 }

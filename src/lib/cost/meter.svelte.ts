@@ -1,4 +1,10 @@
-import { EMPTY_COUNTS, loadCounts, saveCounts, type MeterCounts } from '$lib/storage/db';
+import {
+	countStoredResources,
+	EMPTY_COUNTS,
+	loadCounts,
+	saveCounts,
+	type MeterCounts
+} from '$lib/storage/db';
 
 type Kind = keyof Omit<MeterCounts, 'ownerDid'>;
 
@@ -21,10 +27,31 @@ export class CostMeter {
 	/** Set when the in-memory counts have moved past what storage holds. */
 	#dirty = false;
 
-	/** Pick up where the last sitting left off. */
+	/**
+	 * Pick up where the last sitting left off.
+	 *
+	 * The first time an owner is seen, the starting point comes from what is
+	 * already stored rather than from zero. An install that has been used for
+	 * weeks has its follows and activity cached, so it would otherwise fetch
+	 * nothing on the next load and report that the whole review had been free —
+	 * true of that session and false of the review.
+	 *
+	 * Seeded once. After that the stored counts are the record, so a later load
+	 * never re-counts a cache that is still sitting there.
+	 */
 	async start(ownerDid: string): Promise<void> {
-		this.counts = await loadCounts(ownerDid);
-		this.#dirty = false;
+		const stored = await loadCounts(ownerDid);
+		const seen = Object.entries(stored).some(([key, value]) => key !== 'ownerDid' && value > 0);
+
+		if (seen) {
+			this.counts = stored;
+			this.#dirty = false;
+			return;
+		}
+
+		this.counts = { ownerDid, ...(await countStoredResources(ownerDid)) };
+		this.#dirty = true;
+		await this.flush();
 	}
 
 	/**
