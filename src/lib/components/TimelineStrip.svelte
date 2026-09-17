@@ -71,14 +71,13 @@
 	<div class="months" aria-hidden="true">
 		{#each months as month (month.offset)}
 			<!--
-				A label near the end is anchored by its right edge instead of its
-				left. `monthTicks` can place one within a few days of the window's
-				end, and left-anchored it runs past the track and is clipped to a
-				fragment — "Septem" — which is worse than either a shifted label
-				or none at all. The most recent month is also the one most worth
-				keeping, so it is nudged rather than dropped.
+				Which edge a label hangs from is decided in `monthTicks`, along
+				with dropping the one an end-anchored label would grow back
+				across. Both rules are about where a name fits on the track, and
+				splitting them between here and there is what let the two
+				collide for so long.
 			-->
-			{#if month.offset > 0.9}
+			{#if month.anchor === 'end'}
 				<span class="month" style="right: {(1 - month.offset) * 100}%">{month.label}</span>
 			{:else}
 				<span class="month" style="left: {month.offset * 100}%">{month.label}</span>

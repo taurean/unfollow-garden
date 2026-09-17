@@ -239,10 +239,13 @@ describe('bucketEvents', () => {
 });
 
 describe('monthTicks', () => {
-	it('returns one tick per month boundary inside the strip', () => {
+	it('returns a tick per month boundary inside the strip, less the one dropped for room', () => {
+		// Eleven, not twelve: at a year's lookback the final label always hangs
+		// from the right edge, and the month before it is dropped so the two do
+		// not print on top of each other. See "month label placement" below.
 		const ticks = monthTicks(window(), 365);
 
-		expect(ticks).toHaveLength(12);
+		expect(ticks).toHaveLength(11);
 		expect(ticks.every((tick) => tick.offset >= 0 && tick.offset < 1)).toBe(true);
 	});
 
@@ -250,5 +253,67 @@ describe('monthTicks', () => {
 		const offsets = monthTicks(window(), 365).map((tick) => tick.offset);
 
 		expect([...offsets].sort((a, b) => a - b)).toEqual(offsets);
+	});
+});
+
+/**
+ * Where a month's name sits on the track.
+ *
+ * Two rules that are really one: a label too near the end hangs from its right
+ * edge so it is not clipped to "Septem", and the label it then grows back
+ * across is dropped. Splitting them between the strip and this module is what
+ * let "August" and "September" print on top of each other at every width.
+ */
+describe('month label placement', () => {
+	const windowEnding = (end: string): CoveredWindow => ({
+		start: new Date(Date.parse(end) - 365 * 86_400_000).toISOString(),
+		end,
+		reason: 'lookback',
+		truncated: false
+	});
+
+	it('anchors a label near the end by its right edge', () => {
+		const ticks = monthTicks(windowEnding('2026-09-28T00:00:00Z'), 365);
+
+		expect(ticks.at(-1)?.anchor).toBe('end');
+	});
+
+	it('anchors every other label by its left edge', () => {
+		const ticks = monthTicks(windowEnding('2026-09-28T00:00:00Z'), 365);
+
+		expect(ticks.slice(0, -1).every((tick) => tick.anchor === 'start')).toBe(true);
+	});
+
+	it('drops the month an end-anchored label would grow back across', () => {
+		// The bug this exists for: September pinned to the right edge printed
+		// over August, which was left-anchored a twelfth of a track earlier.
+		const ticks = monthTicks(windowEnding('2026-09-28T00:00:00Z'), 365);
+		const labels = ticks.map((t) => t.label);
+
+		expect(labels.filter((l) => l === 'August')).toHaveLength(0);
+	});
+
+	it('keeps the most recent month, which is the one being looked for', () => {
+		const ticks = monthTicks(windowEnding('2026-09-28T00:00:00Z'), 365);
+
+		expect(ticks.at(-1)?.label).toBe('September');
+	});
+
+	it('drops nothing when the last label sits clear of the end', () => {
+		// A shorter lookback spreads the months out: over 90 days the first of
+		// the current month is a sixth of the way in from the end, which is
+		// room enough to hang it from its left edge and keep its neighbour.
+		const ticks = monthTicks(windowEnding('2026-09-14T00:00:00Z'), 90);
+
+		expect({ anchor: ticks.at(-1)?.anchor, last: ticks.at(-1)?.label }).toEqual({
+			anchor: 'start',
+			last: 'September'
+		});
+	});
+
+	it('keeps the month before the last one when there is room for both', () => {
+		const labels = monthTicks(windowEnding('2026-09-14T00:00:00Z'), 90).map((t) => t.label);
+
+		expect(labels).toContain('August');
 	});
 });
