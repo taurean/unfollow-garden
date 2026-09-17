@@ -71,7 +71,7 @@
 	);
 </script>
 
-<header class="identity">
+<header class="[ identity ] [ l:columns ]">
 	{#if profile?.avatar}
 		<img class="avatar" src={profile.avatar} alt="" width="96" height="96" loading="lazy" />
 	{:else}
@@ -209,20 +209,35 @@
 <style>
 	@layer layout {
 		/*
-		 * Four columns that collapse to a stack: the flags sit far right on a
-		 * wide screen and directly under the name on a narrow one, where a
-		 * right-aligned badge would be stranded.
+		 * Four blocks on the shared twelve columns: avatar, name, bio, flags.
+		 *
+		 * Spans rather than line numbers, so the same rule holds when the grid
+		 * drops to six columns and then to two. The proportions are the ones
+		 * the design is drawn at — the name block gets four columns because a
+		 * display name and a handle need the room, and the bio gets the widest
+		 * share because it is the part that decides the call.
 		 */
-		.identity {
-			display: grid;
-			grid-template-columns: auto minmax(16rem, 1fr) minmax(0, 1.4fr) auto;
-			gap: var(--space-lg) var(--space-xl);
-			align-items: start;
+		.avatar {
+			grid-column: span 1;
 		}
 
-		.avatar {
-			inline-size: 5.5rem;
-			block-size: 5.5rem;
+		.names {
+			grid-column: span 4;
+		}
+
+		.bio {
+			grid-column: span 5;
+		}
+
+		.flags {
+			grid-column: span 2;
+		}
+
+		.avatar,
+		.avatar[data-state='empty'] {
+			inline-size: 100%;
+			max-inline-size: 5.5rem;
+			aspect-ratio: 1;
 			border-radius: var(--radius-pill);
 			object-fit: cover;
 		}
@@ -369,10 +384,17 @@
 			font-size: var(--fs-0);
 		}
 
-		/* wide — see the breakpoint note in src/lib/styles/tokens.css */
+		/*
+		 * wide — six columns. The bio no longer fits beside the name without
+		 * both becoming slivers, so it takes a row of its own and the flags
+		 * follow it. See the breakpoint note in src/lib/styles/tokens.css.
+		 */
 		@media (max-width: 60rem) {
-			.identity {
-				grid-template-columns: auto 1fr;
+			.avatar {
+				grid-column: span 1;
+			}
+			.names {
+				grid-column: span 5;
 			}
 			.bio,
 			.flags {
@@ -383,10 +405,23 @@
 			}
 		}
 
-		/* phone */
+		/*
+		 * phone — the grid stops being equal columns.
+		 *
+		 * At this width there are only two of them, so an avatar occupying one
+		 * would take half the screen to hold a 3.5rem circle and strand the
+		 * name against the far edge. The avatar gets the width it needs and the
+		 * name takes the rest, which is the same relationship the wide layout
+		 * has, just without the ceremony of a column to sit in.
+		 */
 		@media (max-width: 40rem) {
 			.identity {
-				gap: var(--space-lg);
+				grid-template-columns: auto 1fr;
+			}
+
+			.avatar,
+			.names {
+				grid-column: auto;
 			}
 
 			/*
@@ -394,9 +429,15 @@
 			 * what identifies the account and they are competing with it for
 			 * the same line.
 			 */
-			.avatar {
+			/*
+			 * An explicit width, not a capped percentage. The track here is
+			 * `auto`, and `inline-size: 100%` of a track sized to its contents
+			 * resolves to nothing — the avatar vanished entirely.
+			 */
+			.avatar,
+			.avatar[data-state='empty'] {
 				inline-size: 3.5rem;
-				block-size: 3.5rem;
+				max-inline-size: none;
 			}
 
 			/*
