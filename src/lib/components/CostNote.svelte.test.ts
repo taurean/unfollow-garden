@@ -56,9 +56,17 @@ describe('the cost note', () => {
 		await expect.element(screen.getByRole('link', { name: 'xbill' })).toBeVisible();
 	});
 
+	it('says the figure is the cost of loading this person’s own data', async () => {
+		// Not the cost of running the project: the number is what one review of
+		// one follow list would have cost, and the sentence has to say so.
+		const screen = render(CostNote, { props: { counts: { ...NOTHING, profiles: 100 } } });
+
+		expect(screen.container.textContent).toContain('loading your data would have cost');
+	});
+
 	it('says the AT Protocol side was free, which is the whole point', async () => {
 		const screen = render(CostNote, { props: { counts: { ...NOTHING, profiles: 100 } } });
 
-		expect(screen.container.textContent).toContain('On AT Protocol it was free');
+		expect(screen.container.textContent).toContain('because of AT Protocol it was free');
 	});
 });

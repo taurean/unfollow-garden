@@ -38,9 +38,23 @@ describe('identityLink', () => {
 });
 
 describe('identityLink and the chosen client', () => {
-	it('opens a handle in the client the user picked', () => {
+	it('opens a profile in the client the user picked', () => {
+		expect(identityLink({ did: DID, handle: 'alice.test' }, DID, 'mu').href).toBe(
+			'https://mu.social/profile/alice.test'
+		);
+	});
+
+	it('names the account by DID for a client that needs one', () => {
+		// The card always knows the subject's DID, so this is the one link
+		// shape that never has to fall back.
 		expect(identityLink({ did: DID, handle: 'alice.test' }, DID, 'blacksky').href).toBe(
-			'https://blacksky.app/profile/alice.test'
+			`https://blacksky.community/profile/${DID}`
+		);
+	});
+
+	it('still labels it with the handle, which is what a reader recognises', () => {
+		expect(identityLink({ did: DID, handle: 'alice.test' }, DID, 'blacksky').label).toBe(
+			'@alice.test'
 		);
 	});
 

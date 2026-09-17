@@ -15,12 +15,12 @@
 	<BackLink onback={() => session.backToTriage()} />
 
 	<header>
-		<h1 class="u:fs-5">
+		<h1 class="[ u:fs-5 ] [ tabular ]">
 			{formatCost(total)} on X
 		</h1>
 		<p class="lede u:fs-2 u:lh-standard">
-			What this review would have cost if the same reads were bought from X's API. On AT Protocol
-			every one of them was free.
+			What loading your follows and their activity would have cost if the same reads were bought
+			from X's API. On AT Protocol every one of them was free.
 		</p>
 	</header>
 
@@ -37,9 +37,9 @@
 			<thead>
 				<tr>
 					<th scope="col">Read</th>
-					<th scope="col" class="num">Count</th>
-					<th scope="col" class="[ num ] [ rate-col ]">Rate</th>
-					<th scope="col" class="num">Cost</th>
+					<th scope="col" class="[ num ] [ col-count ]">Count</th>
+					<th scope="col" class="[ num rate-col ] [ col-rate ]">Rate</th>
+					<th scope="col" class="[ num ] [ col-cost ]">Cost</th>
 				</tr>
 			</thead>
 			<tbody>
@@ -69,9 +69,7 @@
 	<div class="notes u:fs-0 u:lh-standard">
 		<h2 class="u:fs-1">Where these numbers come from</h2>
 		<p>
-			Rates are X's published per-resource prices, last checked on {longDate(RATES_AS_OF)}. X has
-			replaced its pricing model once already — monthly tiers became pay-per-resource — so this
-			needs re-checking rather than trusting.
+			Rates are X's published per-resource prices, last checked on {longDate(RATES_AS_OF)}.
 			<a
 				href="https://docs.x.com/x-api/getting-started/pricing"
 				target="_blank"
@@ -128,11 +126,35 @@
 		 * figures at the other, with a hand's width of nothing between them —
 		 * and a table is read by carrying a row's label across to its numbers.
 		 */
+		/*
+		 * Fixed columns, and only as wide as they need to be.
+		 *
+		 * Left to size itself the table let a long endpoint push into the
+		 * figures beside it, and filling the stage put a row's label at one
+		 * edge and its numbers at the other. `table-layout: fixed` keeps the
+		 * three number columns at a width that fits their longest value, so
+		 * the label wraps instead of the columns moving.
+		 */
 		table {
 			inline-size: 100%;
-			max-inline-size: 42rem;
+			max-inline-size: 46rem;
+			table-layout: fixed;
 			border-collapse: collapse;
 			text-align: start;
+			/* Figures in columns have to line up to be comparable. */
+			font-variant-numeric: tabular-nums;
+		}
+
+		.col-count {
+			inline-size: 7rem;
+		}
+
+		.col-rate {
+			inline-size: 5rem;
+		}
+
+		.col-cost {
+			inline-size: 8rem;
 		}
 
 		caption {

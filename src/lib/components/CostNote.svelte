@@ -14,7 +14,7 @@
 -->
 {#if dollars > 0}
 	<p class="cost u:fs-0 u:lh-standard">
-		Doing this on x.com would have cost unfollow.garden
+		If this was X.com, loading your data would have cost
 		{#if onexplain}
 			<!--
 				The figure opens the breakdown rather than the rate card. A
@@ -25,7 +25,7 @@
 		{:else}
 			<span class="figure">{formatCost(dollars)}</span>
 		{/if}
-		. On AT Protocol it was free. Inspired by
+		— but because of AT Protocol it was free, which is the only reason this is possible. Inspired by
 		<a href="https://xbill.bisks.net" target="_blank" rel="external noreferrer noopener">xbill</a>.
 	</p>
 {/if}

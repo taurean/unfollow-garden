@@ -90,7 +90,12 @@ export function parseBio(description: string, clientId?: string): BioSegment[] {
 			segments.push({
 				kind: 'mention',
 				text: kept,
-				href: profileUrl(kept.slice(1), clientId)
+				/*
+				 * A handle and nothing else: a bio names people by handle, and
+				 * resolving each one to a DID would be a network request per
+				 * mention. A client that needs the DID falls back.
+				 */
+				href: profileUrl({ handle: kept.slice(1) }, clientId)
 			});
 		}
 		pushText(trailing);

@@ -39,7 +39,8 @@ export function identityLink(
 ): IdentityLink {
 	if (profile && profile.handle && profile.handle !== INVALID_HANDLE) {
 		return {
-			href: profileUrl(profile.handle, clientId),
+			// Both identifiers, so a client that needs the DID gets one.
+			href: profileUrl({ handle: profile.handle, did: profile.did || subjectDid }, clientId),
 			label: `@${profile.handle}`,
 			kind: 'handle'
 		};

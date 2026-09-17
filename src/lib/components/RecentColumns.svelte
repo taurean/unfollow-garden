@@ -59,7 +59,7 @@
 									follow it.
 								-->
 								<a
-									href={toClient(item.url, linkClient)}
+									href={toClient(item.url, linkClient, item.authorDid)}
 									target="_blank"
 									rel="external noreferrer noopener"
 								>
