@@ -6,6 +6,7 @@
 	import ReviewScreen from '$lib/components/ReviewScreen.svelte';
 	import RunScreen from '$lib/components/RunScreen.svelte';
 	import SettingsScreen from '$lib/components/SettingsScreen.svelte';
+	import AppChrome from '$lib/components/AppChrome.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 	import { exact } from '$lib/format';
 	import { TriageSession } from '$lib/triage/session.svelte';
@@ -18,6 +19,8 @@
 		session.restore();
 	});
 </script>
+
+<AppChrome {session} />
 
 <main>
 	{#if session.phase === 'signed-out' || session.phase === 'signing-in'}
@@ -41,17 +44,6 @@
 					deleted twice.
 				</p>
 				<Button onclick={() => session.resumeRun()}>Resume the run</Button>
-			</div>
-		{/if}
-
-		<!--
-			Settings is reachable from every screen except a run in flight, where
-			changing the lookback mid-delete would be nobody's intention.
-		-->
-		{#if session.phase !== 'settings' && session.phase !== 'running'}
-			<div class="utility">
-				<Button data-variant="link" onclick={() => session.openSettings()}>Settings</Button>
-				<Button data-variant="link" onclick={() => session.signOut()}>Sign out</Button>
 			</div>
 		{/if}
 
@@ -125,57 +117,16 @@
 			min-block-size: var(--tap-min);
 		}
 
-		/* Pinned opposite the wordmark, out of the reading column entirely. */
-		.utility {
-			position: fixed;
-			top: 0;
-			right: 0;
-			/*
-			 * Above the wordmark tab, not level with it. On a phone the two
-			 * share one band and these links sit over its right end, so the
-			 * order between them has to be stated rather than left to source
-			 * order across two components.
-			 */
-			z-index: var(--layer-bar);
-			display: flex;
-			align-items: center;
-			gap: var(--space-lg);
-			padding: var(--space-sm) var(--space-lg);
-		}
-
-		.utility :global(.button[data-variant='link']) {
-			background: transparent;
-			color: var(--ink-quiet);
-			font-family: var(--ff-ui);
-			font-size: var(--fs-0);
-			padding: 0;
-		}
-
-		.utility :global(.button[data-variant='link']:hover) {
-			color: var(--ink);
-			text-decoration: underline;
-		}
-
 		/* phone — see the breakpoint note in src/lib/styles/tokens.css */
 		@media (max-width: 40rem) {
 			/*
-			 * Clearance for the fixed band, declared once for the whole page
-			 * rather than by each screen. Every screen would otherwise have to
-			 * know the band exists, and the one that forgot would put its
-			 * first line underneath it.
+			 * Clearance for the fixed band the chrome lays down at this width,
+			 * declared once for the whole page rather than by each screen.
+			 * Every screen would otherwise have to know the band exists, and
+			 * the one that forgot would put its first line underneath it.
 			 */
 			main {
 				padding-block-start: var(--top-band);
-			}
-
-			/* The right-hand end of the wordmark's band, so it inherits its ink. */
-			.utility {
-				block-size: var(--top-band);
-				padding-block: 0;
-			}
-
-			.utility :global(.button[data-variant='link']) {
-				color: var(--chip-ink);
 			}
 
 			.interrupted {

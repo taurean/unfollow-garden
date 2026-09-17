@@ -16,6 +16,7 @@ import {
 } from '$lib/storage/backup';
 import {
 	DEFAULT_SETTINGS,
+	deleteDecisions,
 	deleteOwnerData,
 	loadRuns,
 	type RunRecord,
@@ -518,6 +519,28 @@ export class TriageSession {
 		this.advance();
 	}
 
+	/**
+	 * Clear every decision and start the review again from the top.
+	 *
+	 * The narrow reset, and the one a user actually reaches for: it puts every
+	 * followed account back in the queue without touching the follow list, the
+	 * cached activity, the settings, or the run history.
+	 *
+	 * Accounts already unfollowed by a run do not come back. Their follow
+	 * records are gone from the repo, so the next load will not list them at
+	 * all, and the run that removed them is still the way back.
+	 */
+	async resetDecisions(): Promise<void> {
+		const session = this.session;
+		if (!session) return;
+
+		await deleteDecisions(session.did);
+		this.decisions.clear();
+		this.skipped.clear();
+		this.lastAction = null;
+		this.advance();
+	}
+
 	/** Follow every account a past run unfollowed (PRD, RESTORE-1). */
 	async restoreRun(run: RunRecord): Promise<void> {
 		const session = this.session;
@@ -526,6 +549,25 @@ export class TriageSession {
 		const subjectDids = run.targets.map((target) => target.subjectDid);
 		await this.runs.restore(session, run, subjectDids);
 		await this.refreshDecisions();
+	}
+
+	/**
+	 * Go back to the account on screen.
+	 *
+	 * What the wordmark does. On the only route in the app, "home" is a phase
+	 * change rather than a navigation, so this is not an anchor.
+	 *
+	 * The subject already on screen is kept when it is still undecided:
+	 * `advance` re-sorts the queue, and background loading will have moved
+	 * things since, so calling it unconditionally would swap the card for
+	 * someone else purely because the user came back from settings.
+	 */
+	home(): void {
+		if (this.current && !this.decisions.has(this.current.subjectDid)) {
+			this.phase = 'triage';
+			return;
+		}
+		this.advance();
 	}
 
 	/** Show the marked list, which is the last stop before anything is deleted. */

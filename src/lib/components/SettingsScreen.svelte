@@ -1,12 +1,12 @@
 <script lang="ts">
 	import Button from '$lib/components/ui/Button.svelte';
+	import ConfirmAction from '$lib/components/ConfirmAction.svelte';
 	import { exact, longDate } from '$lib/format';
 	import { runAsJson } from '$lib/triage/runs.svelte';
 	import type { TriageSession } from '$lib/triage/session.svelte';
 
 	let { session }: { session: TriageSession } = $props();
 
-	let confirmingDelete = $state(false);
 	let exportHref = $state('');
 	let importInput = $state<HTMLInputElement | null>(null);
 
@@ -151,26 +151,14 @@
 			Removes every decision, run, and setting stored for this account in this browser. Accounts
 			already unfollowed stay unfollowed. Nothing here exists anywhere else.
 		</p>
-		{#if confirmingDelete}
-			<div class="row">
-				<Button
-					data-variant="unfollow"
-					onclick={async () => {
-						await session.deleteAllData();
-						confirmingDelete = false;
-					}}
-				>
-					Yes, delete it all
-				</Button>
-				<Button data-variant="quiet" onclick={() => (confirmingDelete = false)}>Cancel</Button>
-			</div>
-		{:else}
-			<div class="row">
-				<Button data-variant="quiet" onclick={() => (confirmingDelete = true)}>
-					Delete all stored data
-				</Button>
-			</div>
-		{/if}
+		<p class="hint u:fs-0 u:lh-standard">
+			To review your follows again without losing your run history, use “Start over” instead.
+		</p>
+		<ConfirmAction
+			label="Delete all stored data"
+			confirmLabel="Yes, delete it all"
+			onconfirm={() => session.deleteAllData()}
+		/>
 	</section>
 </section>
 
