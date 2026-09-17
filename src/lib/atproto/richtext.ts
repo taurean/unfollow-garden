@@ -55,7 +55,18 @@ function trimTrailing(match: string): { kept: string; trailing: string } {
  * Returns one plain-text segment for a bio with nothing in it, so a caller
  * never has to special-case the ordinary case.
  */
-export function parseBio(description: string, clientId?: string): BioSegment[] {
+export function parseBio(
+	description: string,
+	clientId?: string,
+	/**
+	 * A handle's DID, when one is known.
+	 *
+	 * A bio carries no facets, so the handle is all the text gives. A client
+	 * that addresses accounts by DID needs this to link a mention at all; one
+	 * that takes handles ignores it.
+	 */
+	didFor?: (handle: string) => string | undefined
+): BioSegment[] {
 	const segments: BioSegment[] = [];
 	let cursor = 0;
 
@@ -90,12 +101,7 @@ export function parseBio(description: string, clientId?: string): BioSegment[] {
 			segments.push({
 				kind: 'mention',
 				text: kept,
-				/*
-				 * A handle and nothing else: a bio names people by handle, and
-				 * resolving each one to a DID would be a network request per
-				 * mention. A client that needs the DID falls back.
-				 */
-				href: profileUrl({ handle: kept.slice(1) }, clientId)
+				href: profileUrl({ handle: kept.slice(1), did: didFor?.(kept.slice(1)) }, clientId)
 			});
 		}
 		pushText(trailing);

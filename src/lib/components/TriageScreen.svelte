@@ -171,6 +171,7 @@
 					{identity}
 					isNew={session.isNewSinceLastPass(session.current)}
 					linkClient={session.settings.linkClient}
+					handles={session.handles}
 					lookbackDays={session.settings.lookbackDays}
 					thresholdDays={session.settings.thresholdDays}
 				/>

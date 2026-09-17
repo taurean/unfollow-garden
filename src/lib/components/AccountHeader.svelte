@@ -2,6 +2,8 @@
 	import { compact, longDate, relative } from '$lib/format';
 	import { identityLink, INVALID_HANDLE } from '$lib/atproto/links';
 	import { parseBio } from '$lib/atproto/richtext';
+	import { clientById } from '$lib/atproto/clients';
+	import type { HandleResolver } from '$lib/triage/handles.svelte';
 	import type { FollowSnapshot } from '$lib/storage/db';
 	import type { IdentityState } from '$lib/triage/identity.svelte';
 
@@ -9,7 +11,8 @@
 		subject,
 		identity = { status: 'pending', account: null, history: null, error: null },
 		isNew = false,
-		linkClient
+		linkClient,
+		handles
 	}: {
 		subject: FollowSnapshot;
 		/** Who this account used to be, looked up only when there is no profile. */
@@ -18,6 +21,8 @@
 		isNew?: boolean;
 		/** Which web client profile links open in (PRD is silent; a preference). */
 		linkClient?: string;
+		/** Turns handles mentioned in a bio into DIDs, for clients that need them. */
+		handles?: HandleResolver;
 	} = $props();
 
 	const profile = $derived(subject.profile);
@@ -36,7 +41,22 @@
 	 * record marks where a link or a handle is — so they are detected from the
 	 * text, the way Bluesky's own client does it.
 	 */
-	const bio = $derived(parseBio(profile?.description ?? '', linkClient));
+	const bio = $derived(
+		parseBio(profile?.description ?? '', linkClient, (handle) => handles?.get(handle))
+	);
+
+	/*
+	 * Only for a client that needs a DID, and only for the handles this bio
+	 * actually names. The link renders immediately with whatever it can build
+	 * and improves in place when the answer arrives, rather than holding the
+	 * card back for a lookup nobody asked for.
+	 */
+	$effect(() => {
+		if (!handles || clientById(linkClient).identifier !== 'did') return;
+		for (const segment of bio) {
+			if (segment.kind === 'mention') void handles.resolve(segment.text.slice(1));
+		}
+	});
 	const name = $derived(
 		profile?.displayName?.trim() ||
 			(profile && profile.handle !== INVALID_HANDLE ? profile.handle : null) ||

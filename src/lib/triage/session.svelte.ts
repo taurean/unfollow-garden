@@ -34,6 +34,7 @@ import {
 } from '$lib/storage/db';
 import { ActivityScanner } from './scanner.svelte';
 import { IdentityProbe } from './identity.svelte';
+import { HandleResolver } from './handles.svelte';
 import { CostMeter } from '$lib/cost/meter.svelte';
 import { RunController } from './runs.svelte';
 
@@ -129,6 +130,14 @@ export class TriageSession {
 	 * card currently on screen is asking (PRD, VIEW-2).
 	 */
 	identities = new IdentityProbe();
+
+	/**
+	 * Handles mentioned in bios, resolved to DIDs.
+	 *
+	 * Only consulted when the chosen web client addresses accounts by DID, and
+	 * cached for the sitting — the answer does not change.
+	 */
+	handles = new HandleResolver();
 
 	/**
 	 * What this review has fetched, for the cost comparison.

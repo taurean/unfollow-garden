@@ -5,6 +5,7 @@
 	import { computeStats } from '$lib/stats/activity-stats';
 	import type { ActivityState } from '$lib/triage/scanner.svelte';
 	import type { IdentityState } from '$lib/triage/identity.svelte';
+	import type { HandleResolver } from '$lib/triage/handles.svelte';
 	import type { FollowSnapshot } from '$lib/storage/db';
 
 	let {
@@ -14,7 +15,8 @@
 		thresholdDays,
 		identity,
 		isNew = false,
-		linkClient
+		linkClient,
+		handles
 	}: {
 		subject: FollowSnapshot;
 		activity: ActivityState;
@@ -24,6 +26,7 @@
 		identity?: IdentityState;
 		isNew?: boolean;
 		linkClient?: string;
+		handles?: HandleResolver;
 	} = $props();
 
 	const loaded = $derived(activity.status === 'ready' ? activity.activity : null);
@@ -39,7 +42,7 @@
 </script>
 
 <article class="account">
-	<AccountHeader {subject} {identity} {isNew} {linkClient} />
+	<AccountHeader {subject} {identity} {isNew} {linkClient} {handles} />
 
 	{#if subject.profile}
 		<ActivitySummary {subject} {stats} {lookbackDays} likesError={loaded?.likesError ?? null} />
