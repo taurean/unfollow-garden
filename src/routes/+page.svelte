@@ -7,6 +7,7 @@
 	import RunScreen from '$lib/components/RunScreen.svelte';
 	import SettingsScreen from '$lib/components/SettingsScreen.svelte';
 	import KeptScreen from '$lib/components/KeptScreen.svelte';
+	import CostNote from '$lib/components/CostNote.svelte';
 	import AppChrome from '$lib/components/AppChrome.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 	import { exact } from '$lib/format';
@@ -84,6 +85,8 @@
 						</Button>
 					{/if}
 				</div>
+
+				<CostNote counts={session.meter.counts} />
 			</section>
 		{/if}
 	{/if}

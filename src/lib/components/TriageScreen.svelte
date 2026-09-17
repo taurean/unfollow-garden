@@ -1,5 +1,6 @@
 <script lang="ts">
 	import AccountCard from '$lib/components/AccountCard.svelte';
+	import CostNote from '$lib/components/CostNote.svelte';
 	import RecentColumns from '$lib/components/RecentColumns.svelte';
 	import SwipeCard from '$lib/components/SwipeCard.svelte';
 	import TriageActions from '$lib/components/TriageActions.svelte';
@@ -180,6 +181,8 @@
 			onundo={() => session.undo()}
 			lookbackDays={session.settings.lookbackDays}
 		/>
+
+		<CostNote counts={session.meter.counts} />
 	{/if}
 </section>
 

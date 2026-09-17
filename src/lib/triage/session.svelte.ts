@@ -34,6 +34,7 @@ import {
 } from '$lib/storage/db';
 import { ActivityScanner } from './scanner.svelte';
 import { IdentityProbe } from './identity.svelte';
+import { CostMeter } from '$lib/cost/meter.svelte';
 import { RunController } from './runs.svelte';
 
 export type Phase =
@@ -126,6 +127,15 @@ export class TriageSession {
 	 * card currently on screen is asking (PRD, VIEW-2).
 	 */
 	identities = new IdentityProbe();
+
+	/**
+	 * What this review has fetched, for the cost comparison.
+	 *
+	 * Counts only, and only resources that crossed the network — the rate card
+	 * that turns them into money lives in `$lib/cost/x-rates` and can change
+	 * without rewriting anyone's history.
+	 */
+	meter = new CostMeter();
 
 	/** Unfollow runs. Separate from triage because a run outlives the queue. */
 	runs = new RunController();
@@ -352,6 +362,7 @@ export class TriageSession {
 
 		try {
 			this.settings = await loadSettings(session.did);
+			await this.meter.start(session.did);
 
 			this.decisions.clear();
 			for (const [subjectDid, record] of await loadDecisions(session.did)) {
@@ -400,11 +411,28 @@ export class TriageSession {
 					this.followBackError = cause instanceof Error ? cause.message : String(cause);
 				}
 
+				/*
+				 * Counted where the numbers already are. `follows` is the
+				 * owner's own repo, which X prices as an owned read; the other
+				 * two are lookups of other people and are priced as such.
+				 */
+				this.meter.record('follows', follows.length);
+				this.meter.record('profiles', profiles.size);
+				this.meter.record('relationships', followsOwner.size);
+
 				subjects = await saveFollows(session.did, follows, profiles, followsOwner);
 			}
 
 			this.subjects = subjects;
+			this.scanner.onFetched = ({ posts, likes }) => {
+				this.meter.record('posts', posts);
+				this.meter.record('likes', likes);
+				// Flushed per subject rather than per resource: a full review
+				// fetches tens of thousands of them.
+				void this.meter.flush();
+			};
 			this.scanner.start(subjects, this.settings.lookbackDays);
+			await this.meter.flush();
 
 			// An unfinished run outranks the queue: it already deleted records,
 			// and leaving it half-done is the one state the user cannot see.
@@ -586,6 +614,7 @@ export class TriageSession {
 		this.pastRuns = [];
 		this.runs.unfinished = null;
 		this.settings = { ownerDid: session.did, ...DEFAULT_SETTINGS };
+		this.meter.reset(session.did);
 		this.advance();
 	}
 
