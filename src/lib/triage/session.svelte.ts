@@ -33,6 +33,7 @@ import {
 	type Settings
 } from '$lib/storage/db';
 import { ActivityScanner } from './scanner.svelte';
+import { IdentityProbe } from './identity.svelte';
 import { RunController } from './runs.svelte';
 
 export type Phase =
@@ -115,6 +116,14 @@ export class TriageSession {
 	 * read what has loaded when it decides who is next.
 	 */
 	scanner = new ActivityScanner();
+
+	/**
+	 * Who an account used to be, for the ones with no profile to show.
+	 *
+	 * Lazy and per-subject, unlike the scanner: it answers a question only the
+	 * card currently on screen is asking (PRD, VIEW-2).
+	 */
+	identities = new IdentityProbe();
 
 	/** Unfollow runs. Separate from triage because a run outlives the queue. */
 	runs = new RunController();
@@ -423,7 +432,46 @@ export class TriageSession {
 		this.current = next ?? null;
 		this.phase = next ? 'triage' : 'done';
 		if (next) this.scanner.prioritize(next.subjectDid);
+		if (!next && this.skipped.size === 0) void this.completePass();
 	}
+
+	/**
+	 * Mark the moment the queue emptied with nothing left skipped.
+	 *
+	 * What makes a follow "new" on the next pass. Only a clean finish counts:
+	 * stopping with accounts still skipped is a sitting that ended, not a
+	 * review that finished, and dating the next pass from it would file the
+	 * skipped backlog under "new".
+	 */
+	private async completePass(): Promise<void> {
+		if (!this.session || this.subjects.length === 0) return;
+
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- read once, never held
+		const finishedAt = new Date().toISOString();
+		this.settings = { ...this.settings, lastPassCompletedAt: finishedAt };
+		await saveSettings($state.snapshot(this.settings));
+	}
+
+	/**
+	 * Followed since the user last finished a full pass.
+	 *
+	 * Before a first pass there is no such thing: everything is the backlog,
+	 * and badging all of it would say nothing. A follow with no parseable date
+	 * is not claimed to be new, because the honest answer is that we cannot
+	 * tell.
+	 */
+	isNewSinceLastPass(subject: FollowSnapshot): boolean {
+		const since = this.settings.lastPassCompletedAt;
+		if (!since || !subject.followedAt) return false;
+		return Date.parse(subject.followedAt) > Date.parse(since);
+	}
+
+	/** How many accounts in the queue arrived since the last finished pass. */
+	newSinceLastPass = $derived(
+		this.settings.lastPassCompletedAt
+			? this.undecided.filter((subject) => this.isNewSinceLastPass(subject)).length
+			: 0
+	);
 
 	/** Defer the subject on screen to the end of this sitting. */
 	skip(): void {

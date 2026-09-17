@@ -19,6 +19,23 @@
 
 	const recent = $derived(activity.activity?.recent ?? []);
 
+	/*
+	 * Only accounts with nothing to show are looked up, and only once they are
+	 * the card on screen. A follow list can hold hundreds of dead accounts, and
+	 * probing them all in the background would be hundreds of requests to
+	 * third-party hosts to answer a question nobody has asked yet.
+	 */
+	$effect(() => {
+		const subject = session.current;
+		if (subject && !subject.profile) session.identities.probe(subject.subjectDid);
+	});
+
+	const identity = $derived(
+		session.current
+			? session.identities.get(session.current.subjectDid)
+			: { status: 'pending' as const, account: null, history: null, error: null }
+	);
+
 	/**
 	 * The last action, read once into a value the notice's body can narrow.
 	 *
@@ -93,6 +110,12 @@
 	<header class="status u:fs-0 tabular">
 		<p>
 			<strong>{exact(session.remaining.length)}</strong> to review
+			{#if session.newSinceLastPass > 0}
+				<!-- Coming back to a reviewed list, the new follows are the
+				     whole reason for the second pass, so they get counted
+				     separately from the ones carried over. -->
+				· {exact(session.newSinceLastPass)} new
+			{/if}
 			{#if session.skippedCount > 0}
 				· {exact(session.skippedCount)} skipped
 			{/if}
@@ -135,6 +158,8 @@
 				<AccountCard
 					subject={session.current}
 					{activity}
+					{identity}
+					isNew={session.isNewSinceLastPass(session.current)}
 					lookbackDays={session.settings.lookbackDays}
 					thresholdDays={session.settings.thresholdDays}
 				/>

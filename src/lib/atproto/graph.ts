@@ -30,6 +30,15 @@ export interface Profile {
 	 * eleven-month silence.
 	 */
 	createdAt?: string;
+	/**
+	 * Moderation labels the AppView already returns on this profile.
+	 *
+	 * Self-labels (where `src` is the account's own DID) and labels applied by
+	 * a labeler arrive in the same list and are told apart by that field. They
+	 * were being dropped here rather than fetched — `getProfiles` has always
+	 * sent them.
+	 */
+	labels?: Array<{ val: string; src: string }>;
 }
 
 interface ListRecordsResponse {
