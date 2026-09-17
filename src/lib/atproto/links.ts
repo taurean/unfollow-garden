@@ -1,3 +1,4 @@
+import { profileUrl } from './clients';
 import type { Profile } from './graph';
 
 /**
@@ -31,10 +32,14 @@ export interface IdentityLink {
  * for an account it cannot resolve. `did:plc:` and `did:web:` take the same
  * form, so nothing here needs to know which method it was handed.
  */
-export function identityLink(profile: Profile | null, subjectDid: string): IdentityLink {
+export function identityLink(
+	profile: Profile | null,
+	subjectDid: string,
+	clientId?: string
+): IdentityLink {
 	if (profile && profile.handle && profile.handle !== INVALID_HANDLE) {
 		return {
-			href: `https://bsky.app/profile/${profile.handle}`,
+			href: profileUrl(profile.handle, clientId),
 			label: `@${profile.handle}`,
 			kind: 'handle'
 		};

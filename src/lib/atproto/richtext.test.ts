@@ -95,3 +95,13 @@ describe('parseBio', () => {
 		expect(textOf('one\n\ntwo')).toBe('one\n\ntwo');
 	});
 });
+
+describe('mentions and the chosen client', () => {
+	it('opens a mention in the client the user picked', () => {
+		const segments = parseBio('Founded by @wang.social', 'mu');
+
+		expect(segments.find((s) => s.kind === 'mention')?.href).toBe(
+			'https://mu.social/profile/wang.social'
+		);
+	});
+});

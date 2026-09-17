@@ -36,3 +36,17 @@ describe('identityLink', () => {
 		expect(identityLink(null, web).href).toBe(`https://atproto.at//${web}`);
 	});
 });
+
+describe('identityLink and the chosen client', () => {
+	it('opens a handle in the client the user picked', () => {
+		expect(identityLink({ did: DID, handle: 'alice.test' }, DID, 'blacksky').href).toBe(
+			'https://blacksky.app/profile/alice.test'
+		);
+	});
+
+	it('still sends a DID to the DID browser, which has no per-client version', () => {
+		// A DID browser is not a feed reader; there is no Blacksky equivalent
+		// to send someone to.
+		expect(identityLink(null, DID, 'blacksky').href).toBe(`https://atproto.at//${DID}`);
+	});
+});

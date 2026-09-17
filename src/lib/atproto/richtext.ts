@@ -12,6 +12,8 @@
  * never wrote.
  */
 
+import { profileUrl } from './clients';
+
 export type BioSegment =
 	| { kind: 'text'; text: string }
 	| { kind: 'link'; text: string; href: string }
@@ -53,7 +55,7 @@ function trimTrailing(match: string): { kept: string; trailing: string } {
  * Returns one plain-text segment for a bio with nothing in it, so a caller
  * never has to special-case the ordinary case.
  */
-export function parseBio(description: string): BioSegment[] {
+export function parseBio(description: string, clientId?: string): BioSegment[] {
 	const segments: BioSegment[] = [];
 	let cursor = 0;
 
@@ -88,7 +90,7 @@ export function parseBio(description: string): BioSegment[] {
 			segments.push({
 				kind: 'mention',
 				text: kept,
-				href: `https://bsky.app/profile/${kept.slice(1)}`
+				href: profileUrl(kept.slice(1), clientId)
 			});
 		}
 		pushText(trailing);

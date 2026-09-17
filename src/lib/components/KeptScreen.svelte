@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Button from '$lib/components/ui/Button.svelte';
+	import BackLink from '$lib/components/BackLink.svelte';
 	import { identityLink } from '$lib/atproto/links';
 	import { exact, longDate, relative } from '$lib/format';
 	import type { TriageSession } from '$lib/triage/session.svelte';
@@ -28,6 +29,8 @@
 </script>
 
 <section class="[ kept ] [ l:stage ]">
+	<BackLink onback={() => session.backToTriage()} />
+
 	<header>
 		<h1 class="u:fs-5">
 			{session.kept.length === 0
@@ -64,7 +67,11 @@
 		{:else}
 			<ul>
 				{#each shown as subject (subject.subjectDid)}
-					{@const link = identityLink(subject.profile, subject.subjectDid)}
+					{@const link = identityLink(
+						subject.profile,
+						subject.subjectDid,
+						session.settings.linkClient
+					)}
 					<li>
 						{#if subject.profile?.avatar}
 							<img src={subject.profile.avatar} alt="" width="40" height="40" loading="lazy" />
@@ -104,10 +111,6 @@
 			</ul>
 		{/if}
 	{/if}
-
-	<div class="actions">
-		<Button data-variant="quiet" onclick={() => session.backToTriage()}>Back to the queue</Button>
-	</div>
 </section>
 
 <style>
@@ -219,13 +222,6 @@
 			font-family: var(--ff-mono);
 		}
 
-		.actions {
-			display: flex;
-			flex-wrap: wrap;
-			gap: var(--space-sm);
-		}
-
-		.actions :global(.button[data-variant='quiet']),
 		li :global(.button[data-variant='quiet']) {
 			min-block-size: var(--tap-min);
 			background-color: transparent;
@@ -233,7 +229,6 @@
 			border: 1px solid var(--hue-z0-divider);
 		}
 
-		.actions :global(.button[data-variant='quiet']:hover:not(:disabled)),
 		li :global(.button[data-variant='quiet']:hover:not(:disabled)) {
 			color: var(--ink);
 		}

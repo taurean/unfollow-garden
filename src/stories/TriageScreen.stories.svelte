@@ -80,7 +80,8 @@
 			ownerDid: 'did:plc:owner',
 			lookbackDays: 365,
 			thresholdDays: 30,
-			lastPassCompletedAt: null
+			lastPassCompletedAt: null,
+			linkClient: 'bsky'
 		};
 		session.scanner.states.set('did:plc:alice', {
 			status: 'ready',

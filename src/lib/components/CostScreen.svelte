@@ -1,5 +1,5 @@
 <script lang="ts">
-	import Button from '$lib/components/ui/Button.svelte';
+	import BackLink from '$lib/components/BackLink.svelte';
 	import { costLines, costOf, formatCost, formatRate, RATES_AS_OF } from '$lib/cost/x-rates';
 	import { exact, longDate } from '$lib/format';
 	import type { TriageSession } from '$lib/triage/session.svelte';
@@ -12,6 +12,8 @@
 </script>
 
 <section class="[ cost ] [ l:stage ]">
+	<BackLink onback={() => session.backToTriage()} />
+
 	<header>
 		<h1 class="u:fs-5">
 			{formatCost(total)} on X
@@ -92,10 +94,6 @@
 			>, which prices a Bluesky repo the same way.
 		</p>
 	</div>
-
-	<div class="actions">
-		<Button data-variant="quiet" onclick={() => session.backToTriage()}>Back to the queue</Button>
-	</div>
 </section>
 
 <style>
@@ -123,8 +121,16 @@
 			color: var(--ink-quiet);
 		}
 
+		/*
+		 * Capped to about the measure of the prose around it.
+		 *
+		 * Left to fill the stage, a row put its label at one edge and its three
+		 * figures at the other, with a hand's width of nothing between them —
+		 * and a table is read by carrying a row's label across to its numbers.
+		 */
 		table {
 			inline-size: 100%;
+			max-inline-size: 42rem;
 			border-collapse: collapse;
 			text-align: start;
 		}
@@ -177,9 +183,15 @@
 			color: var(--ink-quiet);
 		}
 
+		/*
+		 * Right-aligned so the figures line up down the column, and spaced from
+		 * each other: with none, a count ran straight into the rate beside it
+		 * as "255,729$0.005".
+		 */
 		.num {
 			text-align: end;
 			white-space: nowrap;
+			padding-inline-start: var(--space-lg);
 		}
 
 		tfoot th,
@@ -204,23 +216,6 @@
 
 		.notes a {
 			color: inherit;
-		}
-
-		.actions {
-			display: flex;
-			flex-wrap: wrap;
-			gap: var(--space-sm);
-		}
-
-		.actions :global(.button[data-variant='quiet']) {
-			min-block-size: var(--tap-min);
-			background-color: transparent;
-			color: var(--ink-quiet);
-			border: 1px solid var(--hue-z0-divider);
-		}
-
-		.actions :global(.button[data-variant='quiet']:hover:not(:disabled)) {
-			color: var(--ink);
 		}
 
 		/* phone — see the breakpoint note in src/lib/styles/tokens.css */

@@ -8,13 +8,16 @@
 	let {
 		subject,
 		identity = { status: 'pending', account: null, history: null, error: null },
-		isNew = false
+		isNew = false,
+		linkClient
 	}: {
 		subject: FollowSnapshot;
 		/** Who this account used to be, looked up only when there is no profile. */
 		identity?: IdentityState;
 		/** Followed since the user last finished a full pass. */
 		isNew?: boolean;
+		/** Which web client profile links open in (PRD is silent; a preference). */
+		linkClient?: string;
 	} = $props();
 
 	const profile = $derived(subject.profile);
@@ -26,14 +29,14 @@
 	 */
 	const gone = $derived(subject.profileMissingSince !== null);
 
-	const link = $derived(identityLink(profile, subject.subjectDid));
+	const link = $derived(identityLink(profile, subject.subjectDid, linkClient));
 
 	/*
 	 * A profile description carries no facets — unlike a post, nothing in the
 	 * record marks where a link or a handle is — so they are detected from the
 	 * text, the way Bluesky's own client does it.
 	 */
-	const bio = $derived(parseBio(profile?.description ?? ''));
+	const bio = $derived(parseBio(profile?.description ?? '', linkClient));
 	const name = $derived(
 		profile?.displayName?.trim() ||
 			(profile && profile.handle !== INVALID_HANDLE ? profile.handle : null) ||

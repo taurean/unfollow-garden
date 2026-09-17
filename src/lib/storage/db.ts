@@ -7,6 +7,7 @@ import {
 } from 'idb';
 import type { FollowRecord, Profile } from '$lib/atproto/graph';
 import type { SubjectActivity } from '$lib/atproto/activity';
+import { DEFAULT_CLIENT } from '$lib/atproto/clients';
 
 /**
  * Local storage for decisions.
@@ -65,6 +66,14 @@ export interface Settings {
 	 * of presenting both as one undifferentiated queue.
 	 */
 	lastPassCompletedAt: string | null;
+	/**
+	 * Which web client profile and post links open in.
+	 *
+	 * The id of an entry in `$lib/atproto/clients`, not a URL: a stored host
+	 * would outlive a client changing its address, and the resolver falls back
+	 * when it meets an id it no longer knows.
+	 */
+	linkClient: string;
 }
 
 /**
@@ -102,7 +111,8 @@ export const EMPTY_COUNTS: Omit<MeterCounts, 'ownerDid'> = {
 export const DEFAULT_SETTINGS: Omit<Settings, 'ownerDid'> = {
 	lookbackDays: 365,
 	thresholdDays: 30,
-	lastPassCompletedAt: null
+	lastPassCompletedAt: null,
+	linkClient: DEFAULT_CLIENT
 };
 
 /** One target of a run, captured fresh from the owner's repo at run start. */
@@ -147,7 +157,7 @@ interface TriageDB extends DBSchema {
 }
 
 const DB_NAME = 'follow-triage';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 let dbPromise: Promise<IDBPDatabase<TriageDB>> | undefined;
 
@@ -203,6 +213,11 @@ export function upgradeTriageDb(
 		 */
 		void backfillV3(transaction);
 	}
+	if (oldVersion < 4) {
+		// Same reasoning as version 3: a stored record keeps the shape its type
+		// claims rather than handing back `undefined` somewhere far from here.
+		void backfillV4(transaction);
+	}
 }
 
 /**
@@ -225,6 +240,18 @@ async function backfillV3(
 	for (const stored of await settings.getAll()) {
 		if (stored.lastPassCompletedAt === undefined) {
 			await settings.put({ ...stored, lastPassCompletedAt: null });
+		}
+	}
+}
+
+/** Give settings written before version 4 the link-client preference. */
+async function backfillV4(
+	transaction: IDBPTransaction<TriageDB, ArrayLike<StoreNames<TriageDB>>, 'versionchange'>
+): Promise<void> {
+	const settings = transaction.objectStore('settings');
+	for (const stored of await settings.getAll()) {
+		if (stored.linkClient === undefined) {
+			await settings.put({ ...stored, linkClient: DEFAULT_CLIENT });
 		}
 	}
 }

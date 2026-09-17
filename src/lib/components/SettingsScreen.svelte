@@ -1,6 +1,8 @@
 <script lang="ts">
 	import Button from '$lib/components/ui/Button.svelte';
 	import ConfirmAction from '$lib/components/ConfirmAction.svelte';
+	import BackLink from '$lib/components/BackLink.svelte';
+	import { WEB_CLIENTS } from '$lib/atproto/clients';
 	import { exact, longDate } from '$lib/format';
 	import { runAsJson } from '$lib/triage/runs.svelte';
 	import type { TriageSession } from '$lib/triage/session.svelte';
@@ -33,6 +35,8 @@
 </script>
 
 <section class="[ settings ] [ l:stage ]">
+	<BackLink onback={() => session.closeSettings()} label="Back" />
+
 	<header class="l:repel">
 		<h1 class="u:fs-5">Settings</h1>
 		<Button data-variant="quiet" onclick={() => session.closeSettings()}>Done</Button>
@@ -73,6 +77,28 @@
 						session.updateSettings({ thresholdDays: Number(event.currentTarget.value) })}
 				/>
 				<span class="hint u:fs-0">Applied to what is already loaded. Nothing is refetched.</span>
+			</label>
+
+			<!--
+				atproto separates the data from the app that shows it, so the
+				client someone actually reads in is a preference the network
+				supports rather than a detail to hard-code. This app links out
+				constantly, which is what makes it worth setting.
+			-->
+			<label for="link-client">
+				Open links in
+				<select
+					id="link-client"
+					value={session.settings.linkClient}
+					onchange={(event) => session.updateSettings({ linkClient: event.currentTarget.value })}
+				>
+					{#each WEB_CLIENTS as client (client.id)}
+						<option value={client.id}>{client.label}</option>
+					{/each}
+				</select>
+				<span class="hint u:fs-0">
+					Applies to every profile and post link here, including ones already on screen.
+				</span>
 			</label>
 		</div>
 	</section>
@@ -195,6 +221,18 @@
 			gap: var(--space-3xs);
 			font-family: var(--ff-ui);
 			font-size: var(--fs-1);
+		}
+
+		select {
+			font: inherit;
+			/* 16px floor, or iOS Safari zooms the page in on focus and stays. */
+			font-size: max(1rem, var(--fs-2));
+			min-block-size: var(--tap-min);
+			padding: var(--space-2xs) var(--space-xs);
+			border: 1px solid var(--hue-z0-divider);
+			border-radius: var(--radius-md);
+			background-color: var(--surface-raised);
+			color: var(--ink);
 		}
 
 		input[type='number'] {

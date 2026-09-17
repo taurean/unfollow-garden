@@ -170,6 +170,7 @@
 					{activity}
 					{identity}
 					isNew={session.isNewSinceLastPass(session.current)}
+					linkClient={session.settings.linkClient}
 					lookbackDays={session.settings.lookbackDays}
 					thresholdDays={session.settings.thresholdDays}
 				/>
@@ -188,7 +189,7 @@
 
 {#if session.current?.profile && activity.status === 'ready'}
 	<section class="recent">
-		<RecentColumns {recent} />
+		<RecentColumns {recent} linkClient={session.settings.linkClient} />
 	</section>
 {/if}
 

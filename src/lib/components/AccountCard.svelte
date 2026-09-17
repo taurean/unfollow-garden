@@ -13,7 +13,8 @@
 		lookbackDays,
 		thresholdDays,
 		identity,
-		isNew = false
+		isNew = false,
+		linkClient
 	}: {
 		subject: FollowSnapshot;
 		activity: ActivityState;
@@ -22,6 +23,7 @@
 		/** Who this account used to be, when the app view has stopped answering. */
 		identity?: IdentityState;
 		isNew?: boolean;
+		linkClient?: string;
 	} = $props();
 
 	const loaded = $derived(activity.status === 'ready' ? activity.activity : null);
@@ -37,7 +39,7 @@
 </script>
 
 <article class="account">
-	<AccountHeader {subject} {identity} {isNew} />
+	<AccountHeader {subject} {identity} {isNew} {linkClient} />
 
 	{#if subject.profile}
 		<ActivitySummary {subject} {stats} {lookbackDays} likesError={loaded?.likesError ?? null} />

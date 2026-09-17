@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Button from '$lib/components/ui/Button.svelte';
+	import BackLink from '$lib/components/BackLink.svelte';
 	import { exact, longDate, relative } from '$lib/format';
 	import type { TriageSession } from '$lib/triage/session.svelte';
 
@@ -12,6 +13,8 @@
 </script>
 
 <section class="[ review ] [ l:stage ]">
+	<BackLink onback={() => session.backToTriage()} />
+
 	<header>
 		<h1 class="u:fs-5">
 			{marked.length === 0

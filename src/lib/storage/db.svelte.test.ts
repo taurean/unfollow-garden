@@ -301,7 +301,7 @@ describe('the version 3 migration', () => {
 	});
 
 	it('carries every decision and run across the upgrade', async () => {
-		const database = await openDB(NAME, 3, { upgrade: upgradeTriageDb });
+		const database = await openDB(NAME, 4, { upgrade: upgradeTriageDb });
 
 		const result = {
 			decision: (await database.get('decisions', [OWNER, 'did:plc:alice']))?.decision,
@@ -313,7 +313,7 @@ describe('the version 3 migration', () => {
 	});
 
 	it('backfills the two fields version 3 added, rather than leaving them undefined', async () => {
-		const database = await openDB(NAME, 3, { upgrade: upgradeTriageDb });
+		const database = await openDB(NAME, 4, { upgrade: upgradeTriageDb });
 
 		const result = {
 			missingSince: (await database.get('follows', [OWNER, 'did:plc:alice']))?.profileMissingSince,
@@ -325,7 +325,7 @@ describe('the version 3 migration', () => {
 	});
 
 	it('leaves the profile a version 2 record already had', async () => {
-		const database = await openDB(NAME, 3, { upgrade: upgradeTriageDb });
+		const database = await openDB(NAME, 4, { upgrade: upgradeTriageDb });
 
 		const snapshot = await database.get('follows', [OWNER, 'did:plc:alice']);
 		database.close();
@@ -333,8 +333,19 @@ describe('the version 3 migration', () => {
 		expect(snapshot?.profile?.handle).toBe('alice.test');
 	});
 
+	it('backfills the link-client preference added in version 4', async () => {
+		// A settings record written before the preference existed must read
+		// back as the default rather than as `undefined`.
+		const database = await openDB(NAME, 4, { upgrade: upgradeTriageDb });
+
+		const stored = await database.get('settings', OWNER);
+		database.close();
+
+		expect(stored?.linkClient).toBe('bsky');
+	});
+
 	it('creates the meter store the version expects', async () => {
-		const database = await openDB(NAME, 3, { upgrade: upgradeTriageDb });
+		const database = await openDB(NAME, 4, { upgrade: upgradeTriageDb });
 
 		const has = database.objectStoreNames.contains('meter');
 		database.close();
