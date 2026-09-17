@@ -227,6 +227,21 @@ export class TriageSession {
 	 */
 	lastAction = $state<LastAction | null>(null);
 
+	/**
+	 * Everything done to a subject this sitting, oldest first.
+	 *
+	 * `lastAction` only ever held the most recent one, and it is cleared when
+	 * the notice is dismissed or the action is taken back — so a second undo
+	 * had nothing to dispatch on and fell through to the persisted decision
+	 * stack. Skips are not on that stack, by design, so skipping three accounts
+	 * and then undoing took back one and then silently did nothing.
+	 *
+	 * Session-only, like skips themselves (PRD, "Terms"). After a reload it is
+	 * empty and undo falls back to the persisted stack, which is what makes
+	 * decisions survive a closed tab while skips do not.
+	 */
+	private history: LastAction[] = [];
+
 	private actionSeq = 0;
 
 	undecided = $derived(this.subjects.filter((s) => !this.decisions.has(s.subjectDid)));
@@ -353,6 +368,7 @@ export class TriageSession {
 		this.skipped.clear();
 		this.current = null;
 		this.lastAction = null;
+		this.history = [];
 		this.error = null;
 		this.phase = 'signed-out';
 
@@ -573,6 +589,7 @@ export class TriageSession {
 				: 'an account that could not be loaded',
 			seq: ++this.actionSeq
 		};
+		this.history.push(this.lastAction);
 	}
 
 	/** Stop offering to take the last action back, without taking it back. */
@@ -583,6 +600,13 @@ export class TriageSession {
 	/** Put the skipped subjects back in the queue. */
 	reviewSkipped(): void {
 		this.skipped.clear();
+		/*
+		 * Those skips are undone — by this, all at once — so taking one back
+		 * afterwards would un-skip something already in the queue and jump the
+		 * reader to it for no reason.
+		 */
+		this.history = this.history.filter((action) => action.kind !== 'skip');
+		this.lastAction = null;
 		this.advance();
 	}
 
@@ -636,6 +660,7 @@ export class TriageSession {
 		this.decisions.clear();
 		this.skipped.clear();
 		this.lastAction = null;
+		this.history = [];
 		this.pastRuns = [];
 		this.runs.unfinished = null;
 		this.settings = { ownerDid: session.did, ...DEFAULT_SETTINGS };
@@ -662,6 +687,7 @@ export class TriageSession {
 		this.decisions.clear();
 		this.skipped.clear();
 		this.lastAction = null;
+		this.history = [];
 		this.identities = new IdentityProbe();
 
 		/*
@@ -843,11 +869,18 @@ export class TriageSession {
 	}
 
 	async #undo(): Promise<void> {
-		if (this.lastAction?.kind === 'skip') {
-			const { subjectDid } = this.lastAction;
-			this.skipped.delete(subjectDid);
+		/*
+		 * Dispatched on the sitting's history rather than on the notice, which
+		 * is cleared when it is dismissed. A skip never reaches storage, so the
+		 * only record that one happened is here.
+		 */
+		const last = this.history.at(-1);
+
+		if (last?.kind === 'skip') {
+			this.history.pop();
+			this.skipped.delete(last.subjectDid);
 			this.lastAction = null;
-			this.current = this.subjects.find((s) => s.subjectDid === subjectDid) ?? this.current;
+			this.current = this.subjects.find((s) => s.subjectDid === last.subjectDid) ?? this.current;
 			this.phase = 'triage';
 			return;
 		}
@@ -866,6 +899,7 @@ export class TriageSession {
 		this.decisions.delete(subjectDid);
 		this.skipped.delete(subjectDid);
 		this.lastAction = null;
+		if (this.history.at(-1)?.kind !== 'skip') this.history.pop();
 
 		this.current = this.subjects.find((s) => s.subjectDid === subjectDid) ?? this.current;
 		this.phase = 'triage';

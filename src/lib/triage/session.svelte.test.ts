@@ -266,3 +266,80 @@ describe('acting twice before the screen has moved', () => {
 		expect(session.skippedCount).toBe(0);
 	});
 });
+
+/**
+ * Going back through a sitting, not just one step.
+ *
+ * A skip never reaches storage — it is session-only by design (PRD, "Terms") —
+ * so the only record that one happened is in memory. That record was a single
+ * field holding the most recent action, and undoing cleared it, so a second
+ * undo had nothing to dispatch on and fell through to the persisted decision
+ * stack. With only skips behind it, that stack is empty and undo silently did
+ * nothing from the second press onward.
+ */
+describe('undoing a run of skips', () => {
+	it('takes back every skip, one at a time', async () => {
+		session.skip();
+		session.skip();
+
+		await session.undo();
+		const afterFirst = session.skippedCount;
+		await session.undo();
+
+		expect({ afterFirst, afterSecond: session.skippedCount }).toEqual({
+			afterFirst: 1,
+			afterSecond: 0
+		});
+	});
+
+	it('puts each skipped subject back on screen as it is taken back', async () => {
+		session.skip();
+		session.skip();
+
+		await session.undo();
+		const first = session.current?.subjectDid;
+		await session.undo();
+
+		expect({ first, second: session.current?.subjectDid }).toEqual({
+			first: 'did:plc:bob',
+			second: 'did:plc:alice'
+		});
+	});
+
+	it('still undoes a skip after the notice about it was dismissed', async () => {
+		// The notice is a message, not the record. Dismissing it used to take
+		// the only trace of the skip with it.
+		session.skip();
+		session.dismissLastAction();
+
+		await session.undo();
+
+		expect(session.skippedCount).toBe(0);
+	});
+
+	it('walks back through skips and decisions in the order they happened', async () => {
+		session.skip();
+		await session.decide('keep');
+
+		await session.undo();
+		const afterDecisionUndone = { decided: session.decisions.size, skipped: session.skippedCount };
+		await session.undo();
+
+		expect({
+			afterDecisionUndone,
+			afterSkipUndone: { decided: session.decisions.size, skipped: session.skippedCount }
+		}).toEqual({
+			afterDecisionUndone: { decided: 0, skipped: 1 },
+			afterSkipUndone: { decided: 0, skipped: 0 }
+		});
+	});
+
+	it('does not re-offer a skip that reviewing the skipped list already took back', async () => {
+		session.skip();
+		session.reviewSkipped();
+
+		await session.undo();
+
+		expect(session.skippedCount).toBe(0);
+	});
+});
